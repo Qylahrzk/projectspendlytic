@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 
-/// Get Started screen for Spendlytic.
-/// Shows the app logo and navigates to the Login screen.
 class GetStartedScreen extends StatelessWidget {
   const GetStartedScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -20,37 +17,25 @@ class GetStartedScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                /// Logo
-                Image.asset(
-                  'assets/images/spendlytic_logo.png',
-                  height: 200,
-                  fit: BoxFit.contain,
-                  color: colorScheme.primary,
-                ),
+                Image.asset('assets/images/spendlytic_logo.png', height: 200),
                 const SizedBox(height: 40),
-
-                /// Headline
                 Text(
                   "Welcome to Spendlytic!",
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineMedium?.copyWith(
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: colorScheme.onSurface,
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onBackground,
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                /// Subtitle
                 Text(
                   "Track your spending & personal growth adventure. 💸📈",
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onBackground.withOpacity(0.7),
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface),
                 ),
                 const SizedBox(height: 50),
-
-                /// Get Started Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(

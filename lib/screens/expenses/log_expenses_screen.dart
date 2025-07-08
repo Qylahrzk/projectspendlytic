@@ -15,7 +15,12 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   String _selectedCategory = 'General';
-  final List<String> _categories = ['General', 'Food', 'Transportation', 'Shopping'];
+  final List<String> _categories = [
+    'General',
+    'Food',
+    'Transportation',
+    'Shopping',
+  ];
 
   List<Map<String, dynamic>> _expenses = [];
 
@@ -78,56 +83,66 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
   void _showAddExpenseDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Expense'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Add Expense'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                TextField(
+                  controller: _amountController,
+                  decoration: const InputDecoration(labelText: 'Amount'),
+                  keyboardType: TextInputType.number,
+                ),
+                DropdownButton<String>(
+                  value: _selectedCategory,
+                  isExpanded: true,
+                  items:
+                      _categories
+                          .map(
+                            (cat) =>
+                                DropdownMenuItem(value: cat, child: Text(cat)),
+                          )
+                          .toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedCategory = value!);
+                  },
+                ),
+              ],
             ),
-            TextField(
-              controller: _amountController,
-              decoration: const InputDecoration(labelText: 'Amount'),
-              keyboardType: TextInputType.number,
-            ),
-            DropdownButton<String>(
-              value: _selectedCategory,
-              isExpanded: true,
-              items: _categories
-                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
-                  .toList(),
-              onChanged: (value) {
-                setState(() => _selectedCategory = value!);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final title = _titleController.text.trim();
-              final amountText = _amountController.text.trim();
-              if (title.isNotEmpty && amountText.isNotEmpty) {
-                final amount = double.tryParse(amountText);
-                if (amount != null) {
-                  _addExpense(title, amount, _selectedCategory);
-                  _titleController.clear();
-                  _amountController.clear();
-                  Navigator.pop(context);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Invalid amount entered!')),
-                  );
-                }
-              }
-            },
-            child: const Text('Add'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final title = _titleController.text.trim();
+                  final amountText = _amountController.text.trim();
+                  if (title.isNotEmpty && amountText.isNotEmpty) {
+                    final amount = double.tryParse(amountText);
+                    if (amount != null) {
+                      _addExpense(title, amount, _selectedCategory);
+                      _titleController.clear();
+                      _amountController.clear();
+                      Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid amount entered!'),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Add'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -147,20 +162,24 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
   void _showScannedTextDialog(String scannedText) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Scanned Receipt'),
-        content: SingleChildScrollView(child: Text(scannedText)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              _processScannedText(scannedText);
-              Navigator.pop(context);
-            },
-            child: const Text('Add Expense'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Scanned Receipt'),
+            content: SingleChildScrollView(child: Text(scannedText)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  _processScannedText(scannedText);
+                  Navigator.pop(context);
+                },
+                child: const Text('Add Expense'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -209,56 +228,66 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Log Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Log Expenses',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
                 Row(
                   children: [
-                    IconButton(icon: const Icon(Icons.delete), onPressed: _clearExpenses),
-                    IconButton(icon: const Icon(Icons.camera_alt), onPressed: _pickReceiptImage),
+                    IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: _clearExpenses,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt),
+                      onPressed: _pickReceiptImage,
+                    ),
                   ],
                 ),
               ],
             ),
           ),
           Expanded(
-            child: _expenses.isEmpty
-                ? const Center(child: Text('No expenses logged yet.'))
-                : ListView.builder(
-                    itemCount: _expenses.length,
-                    itemBuilder: (context, index) {
-                      final exp = _expenses[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 4,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          title: Text(exp['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${exp['category']} - ${DateFormat.yMMMd().format(DateTime.parse(exp['date']))}'),
-                          trailing: Text('RM ${exp['amount'].toStringAsFixed(2)}'),
-                        ),
-                      );
-                    },
-                  ),
+            child:
+                _expenses.isEmpty
+                    ? const Center(child: Text('No expenses logged yet.'))
+                    : ListView.builder(
+                      itemCount: _expenses.length,
+                      itemBuilder: (context, index) {
+                        final exp = _expenses[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 4,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            title: Text(
+                              exp['title'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${exp['category']} - ${DateFormat.yMMMd().format(DateTime.parse(exp['date']))}',
+                            ),
+                            trailing: Text(
+                              'RM ${exp['amount'].toStringAsFixed(2)}',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddExpenseDialog,
         child: const Icon(Icons.add),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onTabTapped,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Log'),
-          BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Budget'),
-          BottomNavigationBarItem(icon: Icon(Icons.insights), label: 'Insights'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_circle), label: 'Account'),
-        ],
       ),
     );
   }

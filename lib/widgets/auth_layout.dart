@@ -6,6 +6,9 @@ import '../navigation/app_loading_page.dart';
 import '../navigation/app_navigation_layout.dart';
 import '../services/db_service.dart';
 
+/// AuthLayout determines:
+/// - If user is logged in via Firebase
+/// - Otherwise checks SQLite for local Google login
 class AuthLayout extends StatelessWidget {
   const AuthLayout({super.key, this.pageIfNotConnected});
   final Widget? pageIfNotConnected;

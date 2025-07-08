@@ -1,14 +1,13 @@
-import 'dart:developer' as dev;
-
 import 'package:flutter/material.dart';
+
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/db_service.dart';
+// ignore: unused_import
 import '../home/home_screen.dart';
 import 'signup_screen.dart';
+import '../../widgets/auth_layout.dart';
 
-/// The Login screen for Spendlytic.
-/// Supports email/password login + Google login.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,18 +16,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  /// Form key for validation.
   final _formKey = GlobalKey<FormState>();
-
-  /// Services used in this screen.
   final auth = AuthService();
   final googleAuth = GoogleAuthService();
 
-  /// Text controllers for email & password.
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
-  /// UI state flags.
   bool isLoading = false;
   bool showPassword = false;
 
@@ -39,12 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Handle login via email & password.
+  /// Email login flow
   Future<void> loginWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => isLoading = true);
-
     try {
       final cred = await auth.signIn(
         email: emailController.text.trim(),
@@ -59,47 +52,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const AuthLayout()),
+        (_) => false,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  /// Handle Google login.
+  /// Google login flow
   Future<void> loginWithGoogle() async {
     setState(() => isLoading = true);
     try {
-      final googleAccount = await googleAuth.signInWithGoogle();
+      await googleAuth.signInWithGoogle(context);
+      if (!mounted) return;
 
-      if (googleAccount != null) {
-        await DBService().saveUserData(
-          email: googleAccount.email,
-          name: googleAccount.displayName ?? '',
-          provider: 'google',
-        );
-
-        if (!mounted) return;
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      } else {
-        dev.log("❌ Google Sign-In cancelled", name: 'LoginScreen');
-      }
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthLayout()),
+        (_) => false,
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Google login failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Google login failed: $e")));
     } finally {
       setState(() => isLoading = false);
     }
@@ -120,29 +104,26 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 40),
-
-                /// Logo
                 Image.asset(
                   'assets/images/spendlytic_logo.png',
                   height: 120,
                   color: colorScheme.primary,
                 ),
                 const SizedBox(height: 24),
-
-                /// Welcome Text
                 Text(
                   "Welcome back!",
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface, // replaced deprecated onBackground
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                /// Email Field
+                /// Email field
                 TextFormField(
                   controller: emailController,
-                  validator: (val) => val!.contains('@') ? null : 'Enter valid email',
+                  validator:
+                      (val) => val!.contains('@') ? null : 'Enter valid email',
                   keyboardType: TextInputType.emailAddress,
                   decoration: _inputDecoration(
                     context,
@@ -152,50 +133,53 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                /// Password Field
+                /// Password field
                 TextFormField(
                   controller: passwordController,
                   obscureText: !showPassword,
-                  validator: (val) => val!.length >= 6 ? null : 'Min 6 characters',
+                  validator:
+                      (val) => val!.length >= 6 ? null : 'Min 6 characters',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Password',
                     icon: Icons.lock,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        showPassword
-                            ? Icons.visibility
-                            : Icons.visibility_off,
+                        showPassword ? Icons.visibility : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed: () =>
-                          setState(() => showPassword = !showPassword),
+                      onPressed:
+                          () => setState(() => showPassword = !showPassword),
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                /// Login Button
+                /// Email login button
                 ElevatedButton(
                   onPressed: isLoading ? null : loginWithEmail,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 14,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'LOGIN WITH EMAIL',
-                          style: TextStyle(color: Colors.white),
-                        ),
+                  child:
+                      isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                            'LOGIN WITH EMAIL',
+                            style: TextStyle(color: Colors.white),
+                          ),
                 ),
 
                 const SizedBox(height: 16),
 
-                /// Google Sign-in Button
+                /// Google login button
                 ElevatedButton.icon(
                   onPressed: isLoading ? null : loginWithGoogle,
                   icon: const Icon(Icons.login, color: Colors.white),
@@ -205,7 +189,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -214,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 16),
 
-                /// Sign-up Link
+                /// Sign up
                 TextButton(
                   onPressed: () {
                     Navigator.push(
@@ -235,16 +222,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// Helper method for consistent text field styles.
   InputDecoration _inputDecoration(
     BuildContext context, {
     required String hint,
     required IconData icon,
     Widget? suffixIcon,
   }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
+    final colorScheme = Theme.of(context).colorScheme;
     return InputDecoration(
       hintText: hint,
       prefixIcon: Icon(icon, color: colorScheme.primary),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../services/db_service.dart';
+import '../../widgets/auth_layout.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,9 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadDate();
     _loadUserData();
     _loadHomeData();
-    _loadDate();
   }
 
   /// Load current date and day
@@ -35,41 +37,56 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     formattedDate = DateFormat('dd MMMM').format(now);
     dayOfWeek = DateFormat('EEEE').format(now);
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
-  /// Load user name from local DB
+  /// Load user name from SQLite
   Future<void> _loadUserData() async {
-    final userData = await DBService().getUserData();
-    setState(() {
-      userName = userData?['name'] ?? 'Treasurer';
-    });
+    try {
+      final userData = await DBService().getUserData();
+      if (userData != null) {
+        setState(() {
+          userName = userData['name'] ?? 'Treasurer';
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading user data: $e");
+    }
   }
 
-  /// Load home data from local DB
+  /// Load home data from SQLite
   Future<void> _loadHomeData() async {
-    final homeData = await DBService().getHomeData();
-    setState(() {
-      balance = homeData['balance'] ?? 0;
-      spend = homeData['spend'] ?? 0;
-      profit = homeData['profit'] ?? 0;
-      categoryTotals =
-          Map<String, double>.from(homeData['categories'] ?? {});
-      recentTransactions = List<Map<String, dynamic>>.from(
-        homeData['recentTransactions'] ?? [],
-      );
-    });
+    try {
+      final homeData = await DBService().getHomeData();
+      setState(() {
+        balance = homeData['balance'] ?? 0;
+        spend = homeData['spend'] ?? 0;
+        profit = homeData['profit'] ?? 0;
+        categoryTotals = Map<String, double>.from(homeData['categories'] ?? {});
+        recentTransactions = List<Map<String, dynamic>>.from(
+          homeData['recentTransactions'] ?? [],
+        );
+      });
+    } catch (e) {
+      debugPrint("Error loading home data: $e");
+    }
   }
 
-  /// Handle logout
-  void _logout() async {
+  /// Log out user
+  Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     await DBService().clearUserData();
+
     if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthLayout()),
+      (route) => false,
+    );
   }
 
-  /// Show bottom drawer with logout option
+  /// Show bottom drawer with logout
   void _showDrawerMenu() {
     showModalBottomSheet(
       context: context,
@@ -93,13 +110,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Navigate to notifications page (dummy page for now)
+  /// Navigate to dummy notifications page
   void _goToNotifications() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const _NotificationScreen(),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
   }
 
   @override
@@ -148,8 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_none,
-                        color: Colors.white),
+                    icon: const Icon(
+                      Icons.notifications_none,
+                      color: Colors.white,
+                    ),
                     onPressed: _goToNotifications,
                   ),
                   IconButton(
@@ -157,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: _showDrawerMenu,
                   ),
                 ],
-              )
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -201,9 +218,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 "assets/animations/coin.json",
                 height: 120,
                 width: 120,
-              )
+              ),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -215,10 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [
-            colorScheme.primary,
-            colorScheme.secondary,
-          ],
+          colors: [colorScheme.primary, colorScheme.secondary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -240,10 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
         const SizedBox(height: 6),
         Text(
@@ -253,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.bold,
             fontSize: 16,
           ),
-        )
+        ),
       ],
     );
   }
@@ -263,9 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.all(16),
       child: Card(
         color: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -282,47 +291,48 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               categoryTotals.isEmpty
                   ? Text(
-                      "No expenses found.",
-                      style: TextStyle(color: colorScheme.onSurface),
-                    )
+                    "No expenses found.",
+                    style: TextStyle(color: colorScheme.onSurface),
+                  )
                   : Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: categoryTotals.entries.map((entry) {
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Color.lerp(
-                                colorScheme.primary,
-                                Colors.transparent,
-                                0.8,
+                    spacing: 16,
+                    runSpacing: 16,
+                    children:
+                        categoryTotals.entries.map((entry) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Color.lerp(
+                                  colorScheme.primary,
+                                  Colors.transparent,
+                                  0.8,
+                                ),
+                                child: Icon(
+                                  Icons.pie_chart,
+                                  color: colorScheme.primary,
+                                ),
                               ),
-                              child: Icon(
-                                Icons.pie_chart,
-                                color: colorScheme.primary,
+                              const SizedBox(height: 4),
+                              Text(
+                                entry.key,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurface,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              entry.key,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurface,
+                              Text(
+                                "-RM ${entry.value.toStringAsFixed(2)}",
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.redAccent,
+                                ),
                               ),
-                            ),
-                            Text(
-                              "-RM ${entry.value.toStringAsFixed(2)}",
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    )
+                            ],
+                          );
+                        }).toList(),
+                  ),
             ],
           ),
         ),
@@ -335,9 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.all(16),
       child: Card(
         color: colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -354,36 +362,38 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               recentTransactions.isEmpty
                   ? Text(
-                      "No transactions found.",
-                      style: TextStyle(color: colorScheme.onSurface),
-                    )
+                    "No transactions found.",
+                    style: TextStyle(color: colorScheme.onSurface),
+                  )
                   : Column(
-                      children: recentTransactions.map((tx) {
-                        return ListTile(
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 4),
-                          leading: Icon(Icons.receipt_long,
-                              color: colorScheme.primary),
-                          title: Text(
-                            tx["title"] ?? "",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
+                    children:
+                        recentTransactions.map((tx) {
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 4,
                             ),
-                          ),
-                          subtitle: Text(
-                            tx["category"] ?? "Uncategorized",
-                            style:
-                                TextStyle(color: colorScheme.onSurface),
-                          ),
-                          trailing: Text(
-                            "-RM ${tx["amount"].toStringAsFixed(2)}",
-                            style: const TextStyle(
-                                color: Colors.redAccent),
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                            leading: Icon(
+                              Icons.receipt_long,
+                              color: colorScheme.primary,
+                            ),
+                            title: Text(
+                              tx["title"] ?? "",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                            subtitle: Text(
+                              tx["category"] ?? "Uncategorized",
+                              style: TextStyle(color: colorScheme.onSurface),
+                            ),
+                            trailing: Text(
+                              "-RM ${tx["amount"].toStringAsFixed(2)}",
+                              style: const TextStyle(color: Colors.redAccent),
+                            ),
+                          );
+                        }).toList(),
+                  ),
             ],
           ),
         ),
@@ -393,17 +403,14 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 /// Dummy notification screen
-class _NotificationScreen extends StatelessWidget {
-  // ignore: unused_element_parameter
-  const _NotificationScreen({super.key});
+class NotificationScreen extends StatelessWidget {
+  const NotificationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Notifications")),
-      body: const Center(
-        child: Text("No notifications yet."),
-      ),
+      body: const Center(child: Text("No notifications yet.")),
     );
   }
 }

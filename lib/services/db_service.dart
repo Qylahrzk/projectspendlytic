@@ -14,7 +14,7 @@ class DBService {
 
   Database? _db;
 
-  /// Lazily initializes database
+  /// Lazily initializes the database
   Future<Database> get database async {
     _db ??= await _initDB();
     return _db!;
@@ -33,7 +33,7 @@ class DBService {
         await db.execute('''
           CREATE TABLE $_userTable (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
             name TEXT,
             provider TEXT
           );
@@ -43,7 +43,7 @@ class DBService {
         await db.execute('''
           CREATE TABLE $_balanceTable (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            total_balance REAL
+            total_balance REAL DEFAULT 0
           );
         ''');
 
@@ -63,10 +63,6 @@ class DBService {
   }
 
   /// Save user data to userData table
-  ///
-  /// This supports:
-  /// - Firebase users
-  /// - Google users (local sign-in)
   Future<void> saveUserData({
     required String email,
     String? name,
@@ -74,44 +70,62 @@ class DBService {
   }) async {
     final db = await database;
 
-    await db.insert(
-      _userTable,
-      {
+    try {
+      await db.insert(_userTable, {
         'email': email,
         'name': name ?? '',
         'provider': provider ?? '',
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      print("Error saving user data: $e");
+    }
   }
 
   /// Update user name (for profile updates)
   Future<void> updateUserName(String newName) async {
     final db = await database;
-    await db.update(
-      _userTable,
-      {'name': newName},
-    );
+    try {
+      await db.update(_userTable, {'name': newName}, where: 'name IS NOT NULL');
+    } catch (e) {
+      print("Error updating user name: $e");
+    }
   }
 
   /// Retrieve single user session info
   Future<Map<String, dynamic>?> getUserData() async {
     final db = await database;
-    final result = await db.query(_userTable, limit: 1);
-    return result.isNotEmpty ? result.first : null;
+    try {
+      final result = await db.query(_userTable, limit: 1);
+      return result.isNotEmpty ? result.first : null;
+    } catch (e) {
+      print("Error fetching user data: $e");
+      return null;
+    }
   }
 
   /// Deletes all user info for logout
   Future<void> clearUserData() async {
     final db = await database;
-    await db.delete(_userTable);
+    try {
+      await db.delete(_userTable);
+      // Optionally clear session-related data from other tables, like balance and transactions
+      await db.delete(_balanceTable);
+      await db.delete(_transactionTable);
+    } catch (e) {
+      print("Error clearing user data: $e");
+    }
   }
 
   /// Checks if a user session exists locally
   Future<bool> hasSession() async {
     final db = await database;
-    final result = await db.query(_userTable, limit: 1);
-    return result.isNotEmpty;
+    try {
+      final result = await db.query(_userTable, limit: 1);
+      return result.isNotEmpty;
+    } catch (e) {
+      print("Error checking session: $e");
+      return false;
+    }
   }
 
   /// Loads home screen data:
@@ -122,53 +136,54 @@ class DBService {
   Future<Map<String, dynamic>> getHomeData() async {
     final db = await database;
 
-    // Get total balance (defaults to 0 if no record)
-    final balanceResult = await db.query(_balanceTable, limit: 1);
     double balance = 0;
-    if (balanceResult.isNotEmpty) {
-      balance =
-          (balanceResult.first['total_balance'] as num?)?.toDouble() ?? 0;
-    }
-
-    // Get total spend (expenses)
-    final spendResult = await db.rawQuery("""
-      SELECT SUM(amount) as total_spend
-      FROM $_transactionTable
-      WHERE type = 'expense'
-    """);
-
     double totalSpend = 0;
-    if (spendResult.isNotEmpty && spendResult.first['total_spend'] != null) {
-      totalSpend =
-          (spendResult.first['total_spend'] as num).toDouble();
-    }
-
-    // Get total income
-    final incomeResult = await db.rawQuery("""
-      SELECT SUM(amount) as total_income
-      FROM $_transactionTable
-      WHERE type = 'income'
-    """);
-
     double totalIncome = 0;
-    if (incomeResult.isNotEmpty &&
-        incomeResult.first['total_income'] != null) {
-      totalIncome =
-          (incomeResult.first['total_income'] as num).toDouble();
-    }
-
-    // Get expenses grouped by category
-    final categoryResults = await db.rawQuery("""
-      SELECT category, SUM(amount) as total
-      FROM $_transactionTable
-      WHERE type = 'expense'
-      GROUP BY category
-    """);
-
     Map<String, double> categoryTotals = {};
-    for (var row in categoryResults) {
-      categoryTotals[row['category'] as String] =
-          (row['total'] as num?)?.toDouble() ?? 0;
+
+    try {
+      // Get total balance (defaults to 0 if no record)
+      final balanceResult = await db.query(_balanceTable, limit: 1);
+      if (balanceResult.isNotEmpty) {
+        balance =
+            (balanceResult.first['total_balance'] as num?)?.toDouble() ?? 0;
+      }
+
+      // Get total spend (expenses)
+      final spendResult = await db.rawQuery("""
+        SELECT SUM(amount) as total_spend
+        FROM $_transactionTable
+        WHERE type = 'expense'
+      """);
+      if (spendResult.isNotEmpty && spendResult.first['total_spend'] != null) {
+        totalSpend = (spendResult.first['total_spend'] as num).toDouble();
+      }
+
+      // Get total income
+      final incomeResult = await db.rawQuery("""
+        SELECT SUM(amount) as total_income
+        FROM $_transactionTable
+        WHERE type = 'income'
+      """);
+      if (incomeResult.isNotEmpty &&
+          incomeResult.first['total_income'] != null) {
+        totalIncome = (incomeResult.first['total_income'] as num).toDouble();
+      }
+
+      // Get expenses grouped by category
+      final categoryResults = await db.rawQuery("""
+        SELECT category, SUM(amount) as total
+        FROM $_transactionTable
+        WHERE type = 'expense'
+        GROUP BY category
+      """);
+
+      for (var row in categoryResults) {
+        categoryTotals[row['category'] as String] =
+            (row['total'] as num?)?.toDouble() ?? 0;
+      }
+    } catch (e) {
+      print("Error loading home data: $e");
     }
 
     return {
