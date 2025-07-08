@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/db_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadDate();
   }
 
+  /// Load current date and day
   Future<void> _loadDate() async {
     final now = DateTime.now();
     formattedDate = DateFormat('dd MMMM').format(now);
@@ -36,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
+  /// Load user name from local DB
   Future<void> _loadUserData() async {
     final userData = await DBService().getUserData();
     setState(() {
@@ -43,25 +46,30 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Load home data from local DB
   Future<void> _loadHomeData() async {
     final homeData = await DBService().getHomeData();
     setState(() {
       balance = homeData['balance'] ?? 0;
       spend = homeData['spend'] ?? 0;
       profit = homeData['profit'] ?? 0;
-      categoryTotals = Map<String, double>.from(homeData['categories'] ?? {});
+      categoryTotals =
+          Map<String, double>.from(homeData['categories'] ?? {});
       recentTransactions = List<Map<String, dynamic>>.from(
         homeData['recentTransactions'] ?? [],
       );
     });
   }
 
+  /// Handle logout
   void _logout() async {
+    await FirebaseAuth.instance.signOut();
     await DBService().clearUserData();
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/login');
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  /// Show bottom drawer with logout option
   void _showDrawerMenu() {
     showModalBottomSheet(
       context: context,
@@ -85,30 +93,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Navigate to notifications page (dummy page for now)
+  void _goToNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const _NotificationScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F4FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildPurpleHeader(),
-            _buildBalanceCard(balance, spend, profit),
-            _buildExpenseOverview(categoryTotals),
-            _buildRecentTransactions(),
+            _buildPurpleHeader(colorScheme),
+            _buildBalanceCard(colorScheme),
+            _buildExpenseOverview(colorScheme),
+            _buildRecentTransactions(colorScheme),
           ],
         ),
       ),
     );
   }
 
-  /// New Purple Header with rounded bottom and complete layout
-  Widget _buildPurpleHeader() {
+  /// Header with purple background and layout
+  Widget _buildPurpleHeader(ColorScheme colorScheme) {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Color(0xFF6C63FF),
-        borderRadius: BorderRadius.only(
+      decoration: BoxDecoration(
+        color: colorScheme.primary,
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(32),
           bottomRight: Radius.circular(32),
         ),
@@ -117,39 +136,35 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // TOP ROW: Logo + Notification + Hamburger
+          // Top row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // App Logo
               Image.asset(
                 "assets/images/app_logo.png",
                 height: 35,
+                color: Colors.white,
               ),
-              // Notification + Hamburger
               Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.notifications_none,
                         color: Colors.white),
-                    onPressed: () {
-                      // handle notification
-                    },
+                    onPressed: _goToNotifications,
                   ),
                   IconButton(
                     icon: const Icon(Icons.menu, color: Colors.white),
                     onPressed: _showDrawerMenu,
                   ),
                 ],
-              ),
+              )
             ],
           ),
           const SizedBox(height: 16),
 
-          // SECOND ROW: Text info + Lottie
+          // Second row
           Row(
             children: [
-              // Left: text info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,26 +197,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              // Right: Coin Lottie animation
               Lottie.asset(
                 "assets/animations/coin.json",
                 height: 120,
                 width: 120,
-              ),
+              )
             ],
-          ),
+          )
         ],
       ),
     );
   }
 
-  Widget _buildBalanceCard(double balance, double spend, double profit) {
+  Widget _buildBalanceCard(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6C63FF), Color(0xFF9B5DE5)],
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary,
+            colorScheme.secondary,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -241,26 +258,33 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildExpenseOverview(Map<String, double> categoryTotals) {
+  Widget _buildExpenseOverview(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.all(16),
       child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Expenses - Daily Overview",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
+                  color: colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 12),
               categoryTotals.isEmpty
-                  ? const Text("No expenses found.")
+                  ? Text(
+                      "No expenses found.",
+                      style: TextStyle(color: colorScheme.onSurface),
+                    )
                   : Wrap(
                       spacing: 16,
                       runSpacing: 16,
@@ -270,16 +294,23 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             CircleAvatar(
                               radius: 24,
-                              backgroundColor: Colors.deepPurple.shade50,
-                              child: const Icon(
+                              backgroundColor: Color.lerp(
+                                colorScheme.primary,
+                                Colors.transparent,
+                                0.8,
+                              ),
+                              child: Icon(
                                 Icons.pie_chart,
-                                color: Colors.deepPurple,
+                                color: colorScheme.primary,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               entry.key,
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.onSurface,
+                              ),
                             ),
                             Text(
                               "-RM ${entry.value.toStringAsFixed(2)}",
@@ -299,42 +330,56 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRecentTransactions() {
+  Widget _buildRecentTransactions(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.all(16),
       child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "Recent Transactions",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
+                  color: colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 12),
               recentTransactions.isEmpty
-                  ? const Text("No transactions found.")
+                  ? Text(
+                      "No transactions found.",
+                      style: TextStyle(color: colorScheme.onSurface),
+                    )
                   : Column(
                       children: recentTransactions.map((tx) {
                         return ListTile(
                           contentPadding:
                               const EdgeInsets.symmetric(vertical: 4),
-                          leading: const Icon(Icons.receipt_long,
-                              color: Colors.deepPurple),
+                          leading: Icon(Icons.receipt_long,
+                              color: colorScheme.primary),
                           title: Text(
                             tx["title"] ?? "",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
                           ),
-                          subtitle:
-                              Text(tx["category"] ?? "Uncategorized"),
+                          subtitle: Text(
+                            tx["category"] ?? "Uncategorized",
+                            style:
+                                TextStyle(color: colorScheme.onSurface),
+                          ),
                           trailing: Text(
                             "-RM ${tx["amount"].toStringAsFixed(2)}",
-                            style: const TextStyle(color: Colors.redAccent),
+                            style: const TextStyle(
+                                color: Colors.redAccent),
                           ),
                         );
                       }).toList(),
@@ -342,6 +387,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Dummy notification screen
+class _NotificationScreen extends StatelessWidget {
+  // ignore: unused_element_parameter
+  const _NotificationScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Notifications")),
+      body: const Center(
+        child: Text("No notifications yet."),
       ),
     );
   }
