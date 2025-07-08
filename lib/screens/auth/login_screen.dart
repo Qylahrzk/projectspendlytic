@@ -36,7 +36,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'dailyquest.db');
-    _db = await openDatabase(path);
+    _db = await openDatabase(path, version: 1, onCreate: (db, version) async {
+      await db.execute('''
+        CREATE TABLE userData (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          uid TEXT,
+          email TEXT,
+          name TEXT,
+          provider TEXT
+        )
+      ''');
+    });
   }
 
   Future<void> loginWithEmail() async {
@@ -49,13 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
         password: passwordController.text.trim(),
       );
       if (!mounted) return;
+
       Navigator.pushReplacement(
         context as BuildContext,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context as BuildContext).showSnackBar(SnackBar(content: Text("$e")));
+      ScaffoldMessenger.of(context as BuildContext).showSnackBar(
+        SnackBar(content: Text("Login failed: $e")),
+      );
     } finally {
       setState(() => isLoading = false);
     }
@@ -69,10 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await _db?.insert('userData', {
           'uid': null,
           'email': account.email,
-          'displayName': account.displayName,
-          'photoUrl': account.photoUrl,
+          'name': account.displayName,
           'provider': 'google',
         });
+
         if (!mounted) return;
         Navigator.pushReplacement(
           context as BuildContext,
@@ -101,7 +114,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
                 Image.asset('assets/images/spendlytic_logo.png', height: 150),
                 const SizedBox(height: 24),
-                const Text("Welcome back!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Welcome back!",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 32),
                 TextFormField(
                   controller: emailController,
@@ -157,8 +173,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpScreen())),
-                  child: const Text("Don’t have an account? Sign Up", style: TextStyle(color: Colors.deepPurple)),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    );
+                  },
+                  child: const Text(
+                    "Don’t have an account? Sign Up",
+                    style: TextStyle(color: Colors.deepPurple),
+                  ),
                 ),
               ],
             ),

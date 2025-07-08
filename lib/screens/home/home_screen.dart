@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
+import 'package:intl/intl.dart';
 import '../../services/db_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -9,36 +11,78 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String userName = 'User';
-  String userEmail = '';
-  String? photoUrl;
-  int _selectedIndex = 0;
+  String userName = 'Treasurer';
+  String location = 'Malaysia';
+  double balance = 0;
+  double spend = 0;
+  double profit = 0;
+  Map<String, double> categoryTotals = {};
+  List<Map<String, dynamic>> recentTransactions = [];
+  String formattedDate = '';
+  String dayOfWeek = '';
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadHomeData();
+    _loadDate();
+  }
+
+  Future<void> _loadDate() async {
+    final now = DateTime.now();
+    formattedDate = DateFormat('dd MMMM').format(now);
+    dayOfWeek = DateFormat('EEEE').format(now);
+    setState(() {});
   }
 
   Future<void> _loadUserData() async {
     final userData = await DBService().getUserData();
-
     setState(() {
-      userName = userData?['name'] ?? 'User';
-      userEmail = userData?['email'] ?? '';
-      photoUrl = null; // you can use photoUrl if saved
+      userName = userData?['name'] ?? 'Treasurer';
     });
   }
 
-  Future<void> _logout() async {
+  Future<void> _loadHomeData() async {
+    final homeData = await DBService().getHomeData();
+    setState(() {
+      balance = homeData['balance'] ?? 0;
+      spend = homeData['spend'] ?? 0;
+      profit = homeData['profit'] ?? 0;
+      categoryTotals = Map<String, double>.from(homeData['categories'] ?? {});
+      recentTransactions = List<Map<String, dynamic>>.from(
+        homeData['recentTransactions'] ?? [],
+      );
+    });
+  }
+
+  void _logout() async {
     await DBService().clearUserData();
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
   }
 
-  void _onNavTapped(int index) {
-    setState(() => _selectedIndex = index);
-    // Add navigation handling here if needed
+  void _showDrawerMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text("Logout"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _logout();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -48,32 +92,20 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(),
-            _buildBalanceCard(),
-            _buildCategoryRow(),
-            _buildExpenseList(),
+            _buildPurpleHeader(),
+            _buildBalanceCard(balance, spend, profit),
+            _buildExpenseOverview(categoryTotals),
+            _buildRecentTransactions(),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onNavTapped,
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.add_box), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.credit_card), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
-        ],
       ),
     );
   }
 
-  Widget _buildHeader() {
+  /// New Purple Header with rounded bottom and complete layout
+  Widget _buildPurpleHeader() {
     return Container(
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: Color(0xFF6C63FF),
         borderRadius: BorderRadius.only(
@@ -81,131 +113,236 @@ class _HomeScreenState extends State<HomeScreen> {
           bottomRight: Radius.circular(32),
         ),
       ),
-      padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 30),
-      width: double.infinity,
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 48, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundImage: photoUrl != null
-                ? NetworkImage(photoUrl!)
-                : const AssetImage('assets/images/profile.jpg') as ImageProvider,
-            radius: 30,
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // TOP ROW: Logo + Notification + Hamburger
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Welcome back,',
-                style: TextStyle(color: Colors.white70, fontSize: 16),
+              // App Logo
+              Image.asset(
+                "assets/images/app_logo.png",
+                height: 35,
               ),
-              Text(
-                userName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
+              // Notification + Hamburger
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none,
+                        color: Colors.white),
+                    onPressed: () {
+                      // handle notification
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.menu, color: Colors.white),
+                    onPressed: _showDrawerMenu,
+                  ),
+                ],
               ),
             ],
           ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          )
+          const SizedBox(height: 16),
+
+          // SECOND ROW: Text info + Lottie
+          Row(
+            children: [
+              // Left: text info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Welcome back - $userName",
+                      style: const TextStyle(
+                        fontSize: 24,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      location,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "$formattedDate | ${dayOfWeek.toUpperCase()}",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Right: Coin Lottie animation
+              Lottie.asset(
+                "assets/animations/coin.json",
+                height: 120,
+                width: 120,
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBalanceCard() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        elevation: 3,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Total balance',
-                  style: TextStyle(fontSize: 16, color: Colors.black54)),
-              SizedBox(height: 8),
-              Text('\$ 415.38',
-                  style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple)),
-            ],
-          ),
+  Widget _buildBalanceCard(double balance, double spend, double profit) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6C63FF), Color(0xFF9B5DE5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _balanceItem("My Balance", balance),
+          _balanceItem("Spend", spend),
+          _balanceItem("Profit", profit),
+        ],
       ),
     );
   }
 
-  Widget _buildCategoryRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _categoryIcon(Icons.coffee, 'Coffee'),
-              _categoryIcon(Icons.shopping_bag, 'Shopping'),
-              _categoryIcon(Icons.card_giftcard, 'Gifts'),
-              _categoryIcon(Icons.medication, 'Health'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _categoryIcon(IconData icon, String label) {
+  Widget _balanceItem(String label, double value) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 24,
-          backgroundColor: Colors.deepPurple.shade50,
-          child: Icon(icon, color: Colors.deepPurple),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+          ),
         ),
         const SizedBox(height: 6),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(
+          "RM ${value.toStringAsFixed(2)}",
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        )
       ],
     );
   }
 
-  Widget _buildExpenseList() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Recent Transactions',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          _expenseTile('McDonald\'s', 'Restaurants', '-\$14.76',
-              'assets/images/mcd.png'),
-          _expenseTile('H&M', 'Shopping', '-\$50.76', 'assets/images/hm.png'),
-          _expenseTile('ZARA', 'Shopping', '-\$60.87', 'assets/images/zara.png'),
-        ],
+  Widget _buildExpenseOverview(Map<String, double> categoryTotals) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Expenses - Daily Overview",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 12),
+              categoryTotals.isEmpty
+                  ? const Text("No expenses found.")
+                  : Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: categoryTotals.entries.map((entry) {
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.deepPurple.shade50,
+                              child: const Icon(
+                                Icons.pie_chart,
+                                color: Colors.deepPurple,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              entry.key,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            Text(
+                              "-RM ${entry.value.toStringAsFixed(2)}",
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    )
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _expenseTile(String name, String category, String amount, String iconPath) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: Image.asset(iconPath, height: 36),
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(category),
-      trailing: Text(amount, style: const TextStyle(color: Colors.red)),
+  Widget _buildRecentTransactions() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Recent Transactions",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 12),
+              recentTransactions.isEmpty
+                  ? const Text("No transactions found.")
+                  : Column(
+                      children: recentTransactions.map((tx) {
+                        return ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 4),
+                          leading: const Icon(Icons.receipt_long,
+                              color: Colors.deepPurple),
+                          title: Text(
+                            tx["title"] ?? "",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle:
+                              Text(tx["category"] ?? "Uncategorized"),
+                          trailing: Text(
+                            "-RM ${tx["amount"].toStringAsFixed(2)}",
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

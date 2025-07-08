@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:projectspendlytic/screens/home/home_screen.dart';
+import 'package:projectspendlytic/screens/expenses/log_expenses_screen.dart';
 
 // TO-DO: Replace the following with your actual screen imports
 // Example placeholder widgets for now
@@ -29,7 +30,7 @@ class _AppNavigationLayoutState extends State<AppNavigationLayout> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    PlaceholderScreen('Log Expense'),
+    LogExpensesScreen(),
     PlaceholderScreen('Budget Tracking'),
     PlaceholderScreen('Spending Insights'),
     PlaceholderScreen('Profile'),
