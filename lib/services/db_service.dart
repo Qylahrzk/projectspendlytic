@@ -2,20 +2,25 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DBService {
+  // Singleton instance
   static final DBService _instance = DBService._internal();
   factory DBService() => _instance;
   DBService._internal();
 
   static const String _dbName = 'spendlytic.db';
-  static const String _tableName = 'userData';
+  static const String _userTable = 'userData';
+  static const String _balanceTable = 'balance';
+  static const String _transactionTable = 'transactions';
 
   Database? _db;
 
+  /// Lazily initializes database
   Future<Database> get database async {
     _db ??= await _initDB();
     return _db!;
   }
 
+  /// Initializes the SQLite database
   Future<Database> _initDB() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
@@ -24,8 +29,9 @@ class DBService {
       path,
       version: 1,
       onCreate: (db, version) async {
+        // Create userData table
         await db.execute('''
-          CREATE TABLE $_tableName (
+          CREATE TABLE $_userTable (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
             name TEXT,
@@ -33,15 +39,17 @@ class DBService {
           );
         ''');
 
+        // Create balance table
         await db.execute('''
-          CREATE TABLE balance (
+          CREATE TABLE $_balanceTable (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             total_balance REAL
           );
         ''');
 
+        // Create transactions table
         await db.execute('''
-          CREATE TABLE transactions (
+          CREATE TABLE $_transactionTable (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
             amount REAL,
@@ -54,74 +62,105 @@ class DBService {
     );
   }
 
+  /// Save user data to userData table
+  ///
+  /// This supports:
+  /// - Firebase users
+  /// - Google users (local sign-in)
   Future<void> saveUserData({
     required String email,
     String? name,
     String? provider,
   }) async {
     final db = await database;
+
     await db.insert(
-      _tableName,
+      _userTable,
       {
         'email': email,
-        'name': name,
-        'provider': provider,
+        'name': name ?? '',
+        'provider': provider ?? '',
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
+  /// Update user name (for profile updates)
+  Future<void> updateUserName(String newName) async {
+    final db = await database;
+    await db.update(
+      _userTable,
+      {'name': newName},
+    );
+  }
+
+  /// Retrieve single user session info
   Future<Map<String, dynamic>?> getUserData() async {
     final db = await database;
-    final result = await db.query(_tableName, limit: 1);
+    final result = await db.query(_userTable, limit: 1);
     return result.isNotEmpty ? result.first : null;
   }
 
+  /// Deletes all user info for logout
   Future<void> clearUserData() async {
     final db = await database;
-    await db.delete(_tableName);
+    await db.delete(_userTable);
   }
 
+  /// Checks if a user session exists locally
   Future<bool> hasSession() async {
     final db = await database;
-    final result = await db.query(_tableName, limit: 1);
+    final result = await db.query(_userTable, limit: 1);
     return result.isNotEmpty;
   }
 
+  /// Loads home screen data:
+  /// - balance
+  /// - total spend
+  /// - total income
+  /// - expenses grouped by category
   Future<Map<String, dynamic>> getHomeData() async {
     final db = await database;
 
-    final balanceResult = await db.query('balance', limit: 1);
+    // Get total balance (defaults to 0 if no record)
+    final balanceResult = await db.query(_balanceTable, limit: 1);
     double balance = 0;
     if (balanceResult.isNotEmpty) {
-      balance = (balanceResult.first['total_balance'] as num?)?.toDouble() ?? 0;
+      balance =
+          (balanceResult.first['total_balance'] as num?)?.toDouble() ?? 0;
     }
 
+    // Get total spend (expenses)
     final spendResult = await db.rawQuery("""
       SELECT SUM(amount) as total_spend
-      FROM transactions
+      FROM $_transactionTable
       WHERE type = 'expense'
     """);
 
     double totalSpend = 0;
     if (spendResult.isNotEmpty && spendResult.first['total_spend'] != null) {
-      totalSpend = (spendResult.first['total_spend'] as num).toDouble();
+      totalSpend =
+          (spendResult.first['total_spend'] as num).toDouble();
     }
 
+    // Get total income
     final incomeResult = await db.rawQuery("""
       SELECT SUM(amount) as total_income
-      FROM transactions
+      FROM $_transactionTable
       WHERE type = 'income'
     """);
 
     double totalIncome = 0;
-    if (incomeResult.isNotEmpty && incomeResult.first['total_income'] != null) {
-      totalIncome = (incomeResult.first['total_income'] as num).toDouble();
+    if (incomeResult.isNotEmpty &&
+        incomeResult.first['total_income'] != null) {
+      totalIncome =
+          (incomeResult.first['total_income'] as num).toDouble();
     }
 
+    // Get expenses grouped by category
     final categoryResults = await db.rawQuery("""
       SELECT category, SUM(amount) as total
-      FROM transactions
+      FROM $_transactionTable
       WHERE type = 'expense'
       GROUP BY category
     """);

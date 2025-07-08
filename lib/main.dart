@@ -27,8 +27,8 @@ class SpendlyticApp extends StatelessWidget {
         fontFamily: 'Roboto',
         scaffoldBackgroundColor: const Color(0xFFF5F4FA),
         colorScheme: ColorScheme.light(
-          primary: Color(0xFFC3B1E1),          // pastel purple
-          secondary: Color(0xFFCCCCFF),        // periwinkle
+          primary: Color.fromARGB(255, 188, 147, 255),          // pastel purple
+          secondary: Color.fromARGB(255, 217, 191, 250),        // periwinkle
           surface: Colors.white,
           onPrimary: Colors.black,
           onSurface: Color(0xFF333333),
@@ -40,7 +40,7 @@ class SpendlyticApp extends StatelessWidget {
         scaffoldBackgroundColor: Color(0xFF121212),
         colorScheme: ColorScheme.dark(
           primary: Color(0xFFBF00FF),          // Electric Purple
-          secondary: Color(0xFFBC13FE),        // Neon Purple
+          secondary: Color.fromARGB(255, 196, 48, 255),        // Neon Purple
           surface: Color(0xFF1E1E1E),
           onPrimary: Colors.white,
           onSurface: Colors.white,

@@ -17,6 +17,14 @@ class AuthService {
       email: email,
       password: password,
     );
+
+    // Save user session locally
+    await DBService().saveUserData(
+      email: email,
+      name: cred.user?.displayName ?? 'Firebase User',
+      provider: 'firebase',
+    );
+
     dev.log("✅ Firebase login: ${cred.user?.email}", name: 'AuthService');
     return cred;
   }
@@ -30,6 +38,13 @@ class AuthService {
       email: email,
       password: password,
     );
+
+    await DBService().saveUserData(
+      email: email,
+      name: cred.user?.displayName ?? 'Firebase User',
+      provider: 'firebase',
+    );
+
     dev.log("✅ Firebase sign up: ${cred.user?.email}", name: 'AuthService');
     return cred;
   }
@@ -45,6 +60,10 @@ class AuthService {
   Future<void> updateUsername({required String username}) async {
     await currentUser?.updateDisplayName(username);
     await currentUser?.reload();
+
+    // Update name in SQLite too
+    await DBService().updateUserName(username);
+
     dev.log("✅ Updated username: $username", name: 'AuthService');
   }
 
@@ -59,7 +78,10 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final credential = EmailAuthProvider.credential(email: email, password: password);
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
     await currentUser?.reauthenticateWithCredential(credential);
     await currentUser?.delete();
     await DBService().clearUserData();
@@ -72,7 +94,10 @@ class AuthService {
     required String newPassword,
     required String email,
   }) async {
-    final credential = EmailAuthProvider.credential(email: email, password: currentPassword);
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
     await currentUser?.reauthenticateWithCredential(credential);
     await currentUser?.updatePassword(newPassword);
     dev.log("✅ Password updated for $email", name: 'AuthService');
