@@ -1,29 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
+/// Global loading page shown during async operations.
 class AppLoadingPage extends StatelessWidget {
   const AppLoadingPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFFFF8F3),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              color: Colors.deepPurple,
-              strokeWidth: 4,
+            /// Lottie animation
+            Lottie.asset(
+              'assets/animations/loading.json',
+              height: 120,
+              width: 120,
+              repeat: true,
             ),
-            SizedBox(height: 20),
+
+            const SizedBox(height: 24),
+
+            /// Loading text
             Text(
               "Loading...",
-              style: TextStyle(
-                color: Colors.deepPurple,
-                fontSize: 16,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.primary,
                 fontWeight: FontWeight.w600,
               ),
-            )
+            ),
           ],
         ),
       ),
