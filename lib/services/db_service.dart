@@ -2,137 +2,147 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DBService {
-  // Singleton instance
+  // Singleton pattern
   static final DBService _instance = DBService._internal();
   factory DBService() => _instance;
   DBService._internal();
 
+  // Database name
   static const String _dbName = 'spendlytic.db';
+
+  // Table names
   static const String _userTable = 'userData';
   static const String _balanceTable = 'balance';
-  static const String _transactionTable = 'transactions';
+  static const String transactionTable = 'transactions';
 
   Database? _db;
 
-  /// Lazily initializes the database
+  /// Returns the database instance (lazily opens if needed)
   Future<Database> get database async {
     _db ??= await _initDB();
     return _db!;
   }
 
-  /// Initializes the SQLite database
+  /// Initializes the database and handles upgrades
   Future<Database> _initDB() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // BUMPED VERSION from 1 → 2
       onCreate: (db, version) async {
-        // Create userData table
-        await db.execute('''
-          CREATE TABLE $_userTable (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            name TEXT,
-            provider TEXT
-          );
-        ''');
-
-        // Create balance table
-        await db.execute('''
-          CREATE TABLE $_balanceTable (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            total_balance REAL DEFAULT 0
-          );
-        ''');
-
-        // Create transactions table
-        await db.execute('''
-          CREATE TABLE $_transactionTable (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            amount REAL,
-            category TEXT,
-            type TEXT,
-            date TEXT
-          );
-        ''');
+        await _createTables(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // Add missing tables if upgrading from v1
+          await _createTables(db);
+        }
       },
     );
   }
 
-  /// Save user data to userData table
+  /// Creates all tables needed for Spendlytic
+  Future<void> _createTables(Database db) async {
+    // Create userData table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_userTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT,
+        provider TEXT
+      );
+    ''');
+
+    // Create balance table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_balanceTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        total_balance REAL DEFAULT 0
+      );
+    ''');
+
+    // Create transactions table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $transactionTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        amount REAL,
+        category TEXT,
+        type TEXT,
+        date TEXT
+      );
+    ''');
+  }
+
+  /// Deletes the entire database (for dev reset)
+  Future<void> deleteDatabaseFile() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, _dbName);
+    await deleteDatabase(path);
+    print("Database deleted.");
+  }
+
+  /// Save a user record
   Future<void> saveUserData({
     required String email,
     String? name,
     String? provider,
   }) async {
     final db = await database;
-
-    try {
-      await db.insert(_userTable, {
+    await db.insert(
+      _userTable,
+      {
         'email': email,
         'name': name ?? '',
         'provider': provider ?? '',
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    } catch (e) {
-      print("Error saving user data: $e");
-    }
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  /// Update user name (for profile updates)
+  /// Update user name
   Future<void> updateUserName(String newName) async {
     final db = await database;
-    try {
-      await db.update(_userTable, {'name': newName}, where: 'name IS NOT NULL');
-    } catch (e) {
-      print("Error updating user name: $e");
-    }
+    await db.update(
+      _userTable,
+      {'name': newName},
+      where: 'name IS NOT NULL',
+    );
   }
 
-  /// Retrieve single user session info
+  /// Returns the first user record
   Future<Map<String, dynamic>?> getUserData() async {
     final db = await database;
-    try {
-      final result = await db.query(_userTable, limit: 1);
-      return result.isNotEmpty ? result.first : null;
-    } catch (e) {
-      print("Error fetching user data: $e");
-      return null;
-    }
+    final result = await db.query(_userTable, limit: 1);
+    return result.isNotEmpty ? result.first : null;
   }
 
-  /// Deletes all user info for logout
+  /// Deletes all user-related data
   Future<void> clearUserData() async {
     final db = await database;
-    try {
-      await db.delete(_userTable);
-      // Optionally clear session-related data from other tables, like balance and transactions
-      await db.delete(_balanceTable);
-      await db.delete(_transactionTable);
-    } catch (e) {
-      print("Error clearing user data: $e");
-    }
+    await db.delete(_userTable);
+    await db.delete(_balanceTable);
+    await db.delete(transactionTable);
   }
 
-  /// Checks if a user session exists locally
+  /// Checks if user session exists
   Future<bool> hasSession() async {
     final db = await database;
-    try {
-      final result = await db.query(_userTable, limit: 1);
-      return result.isNotEmpty;
-    } catch (e) {
-      print("Error checking session: $e");
-      return false;
-    }
+    final result = await db.query(_userTable, limit: 1);
+    return result.isNotEmpty;
   }
 
-  /// Loads home screen data:
-  /// - balance
-  /// - total spend
-  /// - total income
-  /// - expenses grouped by category
+  /// Loads home data summary for dashboard
+  ///
+  /// Returns a map like:
+  /// {
+  ///   'balance': double,
+  ///   'spend': double,
+  ///   'profit': double,
+  ///   'categories': Map<String, double>
+  /// }
   Future<Map<String, dynamic>> getHomeData() async {
     final db = await database;
 
@@ -142,45 +152,49 @@ class DBService {
     Map<String, double> categoryTotals = {};
 
     try {
-      // Get total balance (defaults to 0 if no record)
+      // Read balance
       final balanceResult = await db.query(_balanceTable, limit: 1);
       if (balanceResult.isNotEmpty) {
         balance =
             (balanceResult.first['total_balance'] as num?)?.toDouble() ?? 0;
       }
 
-      // Get total spend (expenses)
-      final spendResult = await db.rawQuery("""
+      // Total expenses
+      final spendResult = await db.rawQuery('''
         SELECT SUM(amount) as total_spend
-        FROM $_transactionTable
+        FROM $transactionTable
         WHERE type = 'expense'
-      """);
-      if (spendResult.isNotEmpty && spendResult.first['total_spend'] != null) {
+      ''');
+      if (spendResult.isNotEmpty &&
+          spendResult.first['total_spend'] != null) {
         totalSpend = (spendResult.first['total_spend'] as num).toDouble();
       }
 
-      // Get total income
-      final incomeResult = await db.rawQuery("""
+      // Total income
+      final incomeResult = await db.rawQuery('''
         SELECT SUM(amount) as total_income
-        FROM $_transactionTable
+        FROM $transactionTable
         WHERE type = 'income'
-      """);
+      ''');
       if (incomeResult.isNotEmpty &&
           incomeResult.first['total_income'] != null) {
         totalIncome = (incomeResult.first['total_income'] as num).toDouble();
       }
 
-      // Get expenses grouped by category
-      final categoryResults = await db.rawQuery("""
+      // Expenses by category
+      final categoryResults = await db.rawQuery('''
         SELECT category, SUM(amount) as total
-        FROM $_transactionTable
+        FROM $transactionTable
         WHERE type = 'expense'
         GROUP BY category
-      """);
+      ''');
 
       for (var row in categoryResults) {
-        categoryTotals[row['category'] as String] =
-            (row['total'] as num?)?.toDouble() ?? 0;
+        final cat = row['category'] as String?;
+        final total = (row['total'] as num?)?.toDouble() ?? 0;
+        if (cat != null) {
+          categoryTotals[cat] = total;
+        }
       }
     } catch (e) {
       print("Error loading home data: $e");

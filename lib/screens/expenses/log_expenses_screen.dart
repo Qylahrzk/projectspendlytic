@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:google_ml_kit/google_ml_kit.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../services/db_service.dart';
 
 class LogExpensesScreen extends StatefulWidget {
@@ -14,7 +14,9 @@ class LogExpensesScreen extends StatefulWidget {
 class _LogExpensesScreenState extends State<LogExpensesScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+
   String _selectedCategory = 'General';
+
   final List<String> _categories = [
     'General',
     'Food',
@@ -22,9 +24,16 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     'Shopping',
   ];
 
+  double _totalExpenses = 0;
+  Map<String, double> _categoryTotals = {};
   List<Map<String, dynamic>> _expenses = [];
 
-  int _currentIndex = 1;
+  final Map<String, IconData> _categoryIcons = {
+    'General': Icons.category,
+    'Food': Icons.fastfood,
+    'Transportation': Icons.directions_car,
+    'Shopping': Icons.shopping_bag,
+  };
 
   @override
   void initState() {
@@ -32,157 +41,175 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     _fetchExpenses();
   }
 
+  /// Loads all expenses from the transactions table
   Future<void> _fetchExpenses() async {
     final db = await DBService().database;
-    final data = await db.query('expenses', orderBy: 'date DESC');
+
+    // Only select expenses (not income)
+    final data = await db.query(
+      'transactions',
+      where: 'type = ?',
+      whereArgs: ['expense'],
+      orderBy: 'date DESC',
+    );
+
+    double total = 0;
+    Map<String, double> catTotals = {};
+
+    for (var exp in data) {
+      final amount = exp['amount'] as num?;
+      total += amount?.toDouble() ?? 0;
+      final cat = exp['category'] as String? ?? 'General';
+      catTotals[cat] = (catTotals[cat] ?? 0) + (amount?.toDouble() ?? 0);
+    }
+
     setState(() {
       _expenses = data;
+      _totalExpenses = total;
+      _categoryTotals = catTotals;
     });
   }
 
+  /// Adds a new expense record to the DB
   Future<void> _addExpense(String title, double amount, String category) async {
     final db = await DBService().database;
+
     final expense = {
       'title': title,
       'amount': amount,
       'category': category,
+      'type': 'expense', // Important for filtering!
       'date': DateTime.now().toIso8601String(),
     };
-    await db.insert('expenses', expense);
-    _fetchExpenses();
+
+    await db.insert('transactions', expense);
+    await _fetchExpenses();
   }
 
+  /// Deletes all expenses
   Future<void> _clearExpenses() async {
     final db = await DBService().database;
-    await db.delete('expenses');
-    _fetchExpenses();
-    // ignore: use_build_context_synchronously
+
+    // Only delete rows where type = expense
+    await db.delete(
+      'transactions',
+      where: 'type = ?',
+      whereArgs: ['expense'],
+    );
+
+    await _fetchExpenses();
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('All expenses have been cleared!')),
     );
   }
 
-  void _onTabTapped(int index) {
-    setState(() => _currentIndex = index);
-    switch (index) {
-      case 0:
-        Navigator.pushReplacementNamed(context, '/home');
-        break;
-      case 2:
-        Navigator.pushReplacementNamed(context, '/budget_track');
-        break;
-      case 3:
-        Navigator.pushReplacementNamed(context, '/review_insights');
-        break;
-      case 4:
-        Navigator.pushReplacementNamed(context, '/account');
-        break;
-    }
-  }
-
+  /// Opens a dialog to manually add an expense
   void _showAddExpenseDialog() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Add Expense'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                TextField(
-                  controller: _amountController,
-                  decoration: const InputDecoration(labelText: 'Amount'),
-                  keyboardType: TextInputType.number,
-                ),
-                DropdownButton<String>(
-                  value: _selectedCategory,
-                  isExpanded: true,
-                  items:
-                      _categories
-                          .map(
-                            (cat) =>
-                                DropdownMenuItem(value: cat, child: Text(cat)),
-                          )
-                          .toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedCategory = value!);
-                  },
-                ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Add Expense'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(labelText: 'Title'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  final title = _titleController.text.trim();
-                  final amountText = _amountController.text.trim();
-                  if (title.isNotEmpty && amountText.isNotEmpty) {
-                    final amount = double.tryParse(amountText);
-                    if (amount != null) {
-                      _addExpense(title, amount, _selectedCategory);
-                      _titleController.clear();
-                      _amountController.clear();
-                      Navigator.pop(context);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Invalid amount entered!'),
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: const Text('Add'),
-              ),
-            ],
+            TextField(
+              controller: _amountController,
+              decoration: const InputDecoration(labelText: 'Amount'),
+              keyboardType: TextInputType.number,
+            ),
+            DropdownButton<String>(
+              value: _selectedCategory,
+              isExpanded: true,
+              items: _categories
+                  .map((cat) => DropdownMenuItem(
+                        value: cat,
+                        child: Text(cat),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedCategory = value!;
+                });
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              final title = _titleController.text.trim();
+              final amountText = _amountController.text.trim();
+              if (title.isNotEmpty && amountText.isNotEmpty) {
+                final amount = double.tryParse(amountText);
+                if (amount != null) {
+                  _addExpense(title, amount, _selectedCategory);
+                  _titleController.clear();
+                  _amountController.clear();
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Invalid amount entered!')),
+                  );
+                }
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     );
   }
 
+  /// Picks an image from gallery and scans text
   Future<void> _pickReceiptImage() async {
-    final ImagePicker picker = ImagePicker();
+    final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
     if (image != null) {
       final inputImage = InputImage.fromFilePath(image.path);
-      // ignore: deprecated_member_use
-      final textDetector = GoogleMlKit.vision.textRecognizer();
-      final recognizedText = await textDetector.processImage(inputImage);
+      final textRecognizer = TextRecognizer();
+      final recognizedText = await textRecognizer.processImage(inputImage);
       String scannedText = recognizedText.text;
+      textRecognizer.close();
       _showScannedTextDialog(scannedText);
     }
   }
 
+  /// Shows scanned text in a dialog for confirmation
   void _showScannedTextDialog(String scannedText) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Scanned Receipt'),
-            content: SingleChildScrollView(child: Text(scannedText)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  _processScannedText(scannedText);
-                  Navigator.pop(context);
-                },
-                child: const Text('Add Expense'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Scanned Receipt'),
+        content: SingleChildScrollView(child: Text(scannedText)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              _processScannedText(scannedText);
+              Navigator.pop(context);
+            },
+            child: const Text('Add Expense'),
+          ),
+        ],
+      ),
     );
   }
 
+  /// Attempts to extract title and amount from scanned text
   void _processScannedText(String text) {
     final title = _extractTitleFromText(text);
     final amount = _extractAmountFromText(text);
@@ -195,11 +222,13 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     }
   }
 
+  /// Extracts a title (first line) from scanned text
   String? _extractTitleFromText(String text) {
     final lines = text.split('\n');
     return lines.isNotEmpty ? lines[0].trim() : null;
   }
 
+  /// Extracts an RM amount from scanned text
   double? _extractAmountFromText(String text) {
     final regex = RegExp(r'RM\s?\d+(\.\d{1,2})?');
     final match = regex.firstMatch(text);
@@ -212,83 +241,187 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.purple[50],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        backgroundColor: colorScheme.primary,
         title: const Text('Spendlytic - Expenses'),
         actions: [
-          IconButton(icon: const Icon(Icons.settings), onPressed: () {}),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Log Expenses',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: _clearExpenses,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt),
-                      onPressed: _pickReceiptImage,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: _clearExpenses,
           ),
-          Expanded(
-            child:
-                _expenses.isEmpty
-                    ? const Center(child: Text('No expenses logged yet.'))
-                    : ListView.builder(
-                      itemCount: _expenses.length,
-                      itemBuilder: (context, index) {
-                        final exp = _expenses[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 4,
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            title: Text(
-                              exp['title'],
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${exp['category']} - ${DateFormat.yMMMd().format(DateTime.parse(exp['date']))}',
-                            ),
-                            trailing: Text(
-                              'RM ${exp['amount'].toStringAsFixed(2)}',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+          IconButton(
+            icon: const Icon(Icons.camera_alt),
+            onPressed: _pickReceiptImage,
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: colorScheme.primary,
         onPressed: _showAddExpenseDialog,
         child: const Icon(Icons.add),
       ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildTotalExpensesCard(colorScheme),
+            _buildCategoryOverview(colorScheme),
+            _buildExpenseList(colorScheme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Card displaying total expenses centered on screen
+  Widget _buildTotalExpensesCard(ColorScheme colorScheme) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primary,
+            colorScheme.secondary,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "Total Expenses",
+            style: TextStyle(
+              color: colorScheme.onPrimary,
+              fontSize: 18,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "RM ${_totalExpenses.toStringAsFixed(2)}",
+            style: TextStyle(
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 32,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Displays categories as icons with total amounts
+  Widget _buildCategoryOverview(ColorScheme colorScheme) {
+    if (_categoryTotals.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(
+          "No expenses to display.",
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: _categoryTotals.entries.map((entry) {
+          final icon = _categoryIcons[entry.key] ?? Icons.category;
+          return Container(
+            width: 100,
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.primary,
+                width: 1,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            child: Column(
+              children: [
+                Icon(
+                  icon,
+                  size: 28,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  entry.key,
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "- RM ${entry.value.toStringAsFixed(2)}",
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 12,
+                  ),
+                )
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Displays the list of all expense records
+  Widget _buildExpenseList(ColorScheme colorScheme) {
+    if (_expenses.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text("No expenses logged yet."),
+      );
+    }
+
+    return ListView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: _expenses.length,
+      itemBuilder: (context, index) {
+        final exp = _expenses[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 4,
+          child: ListTile(
+            leading: Icon(
+              _categoryIcons[exp['category']] ?? Icons.category,
+              color: colorScheme.primary,
+            ),
+            title: Text(
+              exp['title'] ?? "",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              "${exp['category']} - ${DateFormat.yMMMd().format(DateTime.parse(exp['date']))}",
+              style: TextStyle(color: colorScheme.onSurface),
+            ),
+            trailing: Text(
+              'RM ${exp['amount'].toStringAsFixed(2)}',
+              style: TextStyle(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

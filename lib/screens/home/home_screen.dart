@@ -204,9 +204,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "$formattedDate | ${dayOfWeek.toUpperCase()}",
+                      "${formattedDate.toUpperCase()} | ${dayOfWeek.toUpperCase()}",
                       style: const TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         color: Colors.white70,
                         fontWeight: FontWeight.w800,
                       ),
@@ -215,9 +215,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Lottie.asset(
-                "assets/animations/coin.json",
-                height: 120,
-                width: 120,
+                "assets/animations/money.json",
+                height: 140,
+                width: 180,
               ),
             ],
           ),
