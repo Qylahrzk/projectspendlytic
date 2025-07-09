@@ -247,7 +247,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: colorScheme.primary,
-        title: const Text('Spendlytic - Expenses'),
+        title: const Text('Log Expenses'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete),

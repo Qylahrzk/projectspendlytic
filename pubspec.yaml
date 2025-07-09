@@ -51,7 +51,8 @@ dependencies:
   lottie: ^3.3.1
   geolocator: ^14.0.2
   geocoding: ^4.0.0
-
+  shared_preferences: ^2.1.0
+  flutter_local_notifications: ^17.1.2
 
 
 dev_dependencies:
@@ -80,7 +81,7 @@ flutter:
   assets:
     - assets/images/spendlytic_logo.png
     - assets/images/app_logo.png
-    - assets/animations/coin.json
+    - assets/animations/money.json
 
 
   # An image asset can refer to one or more resolution-specific "variants", see
