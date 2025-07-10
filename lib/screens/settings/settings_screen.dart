@@ -18,11 +18,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool isNotificationOn = true;
   String selectedLanguage = 'English';
 
+  // Language options
   final Map<String, Locale> localeMap = {
     'English': const Locale('en'),
     'Malay': const Locale('ms'),
     'Chinese': const Locale('zh'),
   };
+
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -30,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     loadPreferences();
   }
 
+  // Load user preferences (theme, notifications, language)
   Future<void> loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     final themeNotifier = Provider.of<ThemeNotifier>(context, listen: false);
@@ -38,10 +42,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isDarkMode = prefs.getBool('is_dark_mode') ?? false;
       isNotificationOn = prefs.getBool('notifications_enabled') ?? true;
       selectedLanguage = prefs.getString('selected_language') ?? 'English';
-
-      themeNotifier.toggleTheme(isDarkMode);
-      context.setLocale(localeMap[selectedLanguage]!);
     });
+
+    themeNotifier.toggleTheme(isDarkMode);
+    context.setLocale(localeMap[selectedLanguage]!);
   }
 
   Future<void> saveDarkModePref(bool value) async {
@@ -57,6 +61,133 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> saveLanguagePref(String language) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selected_language', language);
+  }
+
+  /// Show dialog for changing password
+  Future<void> showChangePasswordDialog() async {
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: currentController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Current Password'),
+            ),
+            TextField(
+              controller: newController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await _authService.resetPasswordFromCurrentPassword(
+                  currentPassword: currentController.text,
+                  newPassword: newController.text,
+                  email: _authService.currentUser?.email ?? '',
+                );
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password changed successfully')),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${e.toString()}')),
+                );
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show dialog for deleting the account
+  Future<void> showDeleteAccountDialog() async {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your credentials to confirm account deletion.'),
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await _authService.deleteAccount(
+                  email: emailController.text.trim(),
+                  password: passwordController.text,
+                );
+                if (mounted) {
+                  Navigator.popUntil(context, (route) => route.isFirst);
+                  Navigator.pushReplacementNamed(context, '/get_started');
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${e.toString()}')),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show confirmation dialog before logging out
+  Future<void> showLogoutConfirmation() async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              await _authService.signOut();
+              if (mounted) {
+                Navigator.popUntil(context, (route) => route.isFirst);
+                Navigator.pushReplacementNamed(context, '/get_started');
+              }
+            },
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -88,6 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// Container with all the settings options
   Widget settingsContainer(BuildContext context, ColorScheme colorScheme) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 500),
@@ -114,10 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: isDarkMode,
             onChanged: (value) {
               setState(() => isDarkMode = value);
-              Provider.of<ThemeNotifier>(
-                context,
-                listen: false,
-              ).toggleTheme(value);
+              Provider.of<ThemeNotifier>(context, listen: false).toggleTheme(value);
               saveDarkModePref(value);
             },
           ),
@@ -144,13 +273,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               dropdownColor: colorScheme.primary,
               style: const TextStyle(fontSize: 14),
               underline: Container(),
-              items:
-                  localeMap.keys.map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
+              items: localeMap.keys.map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
               onChanged: (String? newValue) {
                 if (newValue == null) return;
                 setState(() => selectedLanguage = newValue);
@@ -161,21 +289,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 10),
           ListTile(
-            leading: Icon(Icons.person, color: colorScheme.primary),
-            title: Text(
-              'Account Settings'.tr(),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+            leading: Icon(Icons.lock, color: colorScheme.primary),
+            title: const Text('Change Password'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              Navigator.pushNamed(context, '/account_settings');
-            },
+            onTap: showChangePasswordDialog,
+          ),
+          ListTile(
+            leading: Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text('Delete Account'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: showDeleteAccountDialog,
+          ),
+          ListTile(
+            leading: Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('Log Out'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: showLogoutConfirmation,
           ),
         ],
       ),
     );
   }
 
+  /// Helper widget for toggles (dark mode, notifications)
   Widget buildToggleRow({
     required IconData icon,
     required Color color,

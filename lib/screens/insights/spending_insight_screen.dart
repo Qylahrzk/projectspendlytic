@@ -1,7 +1,7 @@
+// [Your imports remain unchanged]
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-
 import '../../services/db_service.dart';
 
 class SpendingInsightScreen extends StatefulWidget {
@@ -16,7 +16,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
   DateTime _selectedMonth = DateTime.now();
   double _monthlyTotal = 0;
   Map<String, double> _categoryTotals = {};
-  List<Map<String, dynamic>> _dailyExpenses = [];
+  Map<String, Map<String, double>> _dayCategoryAmounts = {}; // ✅ New map: {dateString: {category: amount}}
   List<Map<String, dynamic>> _recentTransactions = [];
 
   final Map<String, Color> _categoryColors = {
@@ -35,8 +35,10 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
 
   Future<void> _fetchInsights() async {
     final db = await DBService().database;
+
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-    final lastDay = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
+    final nextMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
+    final lastDay = nextMonth.subtract(const Duration(days: 1));
 
     final data = await db.query(
       'transactions',
@@ -51,21 +53,22 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
 
     double total = 0;
     Map<String, double> catTotals = {};
-    Map<String, double> dayTotals = {};
+    Map<String, Map<String, double>> dayCatAmounts = {}; // ✅ New structure
     List<Map<String, dynamic>> recent = [];
 
     for (var tx in data) {
-      final amount = tx['amount'] as num? ?? 0;
+      final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
       final category = tx['category'] as String? ?? 'General';
       final rawDate = tx['date'];
-      final date =
-          rawDate != null ? DateTime.tryParse(rawDate.toString()) : null;
+      final date = rawDate != null ? DateTime.tryParse(rawDate.toString()) : null;
 
       if (date != null) {
-        final dayKey = DateFormat('yyyy-MM-dd').format(date);
+        final key = DateFormat('yyyy-MM-dd').format(date);
         total += amount;
         catTotals[category] = (catTotals[category] ?? 0) + amount;
-        dayTotals[dayKey] = (dayTotals[dayKey] ?? 0) + amount;
+
+        dayCatAmounts[key] ??= {};
+        dayCatAmounts[key]![category] = (dayCatAmounts[key]![category] ?? 0) + amount;
       }
     }
 
@@ -74,21 +77,19 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     setState(() {
       _monthlyTotal = total;
       _categoryTotals = catTotals;
+      _dayCategoryAmounts = dayCatAmounts;
       _recentTransactions = recent;
-      _dailyExpenses =
-          dayTotals.entries
-              .map((e) => {'date': e.key, 'amount': e.value})
-              .toList();
     });
   }
 
-  void _pickMonth() async {
+  Future<void> _pickMonth() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedMonth,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDatePickerMode: DatePickerMode.year,
+      helpText: "Select Month",
     );
 
     if (picked != null) {
@@ -100,19 +101,14 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: scaffoldBg,
       appBar: AppBar(
-        backgroundColor: colorScheme.primary,
-        title: const Text('Statistic', style: TextStyle(color: Colors.white)),
+        title: const Text('Statistic'),
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: _pickMonth,
-            color: Colors.white,
           ),
         ],
       ),
@@ -135,38 +131,36 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children:
-            ['Expense', 'Savings'].map((mode) {
-              final isSelected = _selectedMode == mode;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedMode = mode;
-                      _fetchInsights();
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected ? colorScheme.primary : Colors.transparent,
-                      border: Border.all(color: colorScheme.primary),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      mode,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+        children: ['Expense', 'Savings'].map((mode) {
+          final isSelected = _selectedMode == mode;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedMode = mode;
+                  _fetchInsights();
+                });
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? colorScheme.primary : Colors.transparent,
+                  border: Border.all(color: colorScheme.primary),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  mode,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : colorScheme.primary,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              );
-            }).toList(),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -192,30 +186,54 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
 
   Widget _buildBarChart() {
     return SizedBox(
-      height: 200,
+      height: 220,
       child: BarChart(
         BarChartData(
-          titlesData: FlTitlesData(show: false),
+          titlesData: FlTitlesData(
+            show: true,
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 5,
+                getTitlesWidget: (value, meta) {
+                  final day = value.toInt();
+                  if (day < 1 || day > 31) return const SizedBox();
+                  return Text('$day', style: const TextStyle(fontSize: 10));
+                },
+              ),
+            ),
+          ),
           borderData: FlBorderData(show: false),
-          barGroups:
-              _dailyExpenses.map((e) {
-                final rawDate = e['date'];
-                final date =
-                    rawDate != null
-                        ? DateTime.tryParse(rawDate.toString())
-                        : null;
-                if (date == null) return BarChartGroupData(x: 0, barRods: []);
-                return BarChartGroupData(
-                  x: date.day,
-                  barRods: [
-                    BarChartRodData(
-                      toY: e['amount'],
-                      color: const Color(0xFFFFE209), // Soft yellow
-                      width: 16,
-                    ),
-                  ],
-                );
-              }).toList(),
+          barGroups: _dayCategoryAmounts.entries.map((entry) {
+            final dateStr = entry.key;
+            final categories = entry.value;
+            final date = DateTime.tryParse(dateStr);
+            if (date == null) return BarChartGroupData(x: 0, barRods: []);
+
+            double runningTotal = 0;
+            final rods = categories.entries.map((catEntry) {
+              final fromY = runningTotal;
+              final toY = runningTotal + catEntry.value;
+              final rod = BarChartRodStackItem(
+                fromY,
+                toY,
+                _categoryColors[catEntry.key] ?? Colors.grey,
+              );
+              runningTotal = toY;
+              return rod;
+            }).toList();
+
+            return BarChartGroupData(
+              x: date.day,
+              barRods: [
+                BarChartRodData(
+                  toY: runningTotal,
+                  rodStackItems: rods,
+                  width: 10,
+                ),
+              ],
+            );
+          }).toList(),
         ),
       ),
     );
@@ -227,33 +245,29 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children:
-              _categoryTotals.entries.map((entry) {
-                return Container(
-                  margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _categoryColors[entry.key] ?? Colors.grey[400],
-                    borderRadius: BorderRadius.circular(12),
+          children: _categoryTotals.entries.map((entry) {
+            return Container(
+              margin: const EdgeInsets.only(right: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _categoryColors[entry.key] ?? Colors.grey[400],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.key, style: const TextStyle(color: Colors.white)),
+                  Text(
+                    '- RM ${entry.value.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.key,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      Text(
-                        '- RM ${entry.value.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                ],
+              ),
+            );
+          }).toList(),
         ),
       ),
     );

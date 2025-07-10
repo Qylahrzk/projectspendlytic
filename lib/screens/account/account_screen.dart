@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:projectspendlytic/screens/settings/settings_screen.dart';
 import 'dart:io';
 
 import '../../models/user_model.dart';
@@ -16,6 +17,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final ImagePicker _picker = ImagePicker();
   final DBService _dbService = DBService();
 
+  /// Holds the currently loaded user profile.
   UserModel? _user;
 
   @override
@@ -24,13 +26,15 @@ class _AccountScreenState extends State<AccountScreen> {
     _loadUserData();
   }
 
+  /// Loads the user profile from the DB.
+  /// If no user exists yet, creates a default user.
   Future<void> _loadUserData() async {
     try {
       final fetchedUser = await _dbService.getUser();
       if (fetchedUser != null) {
         setState(() => _user = fetchedUser);
       } else {
-        // Create default user if none exists
+        // Create a default user if the table is empty
         final newUser = UserModel(
           email: 'your.email@example.com',
           name: 'Your Name',
@@ -42,13 +46,15 @@ class _AccountScreenState extends State<AccountScreen> {
         setState(() => _user = newUser);
       }
     } catch (e) {
-      print("Error loading user: $e");
+      debugPrint("Error loading user: $e");
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load user data: $e')),
       );
     }
   }
 
+  /// Allows the user to pick a new profile picture from the gallery.
   Future<void> _pickProfilePicture() async {
     if (_user == null) return;
 
@@ -61,6 +67,7 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  /// Shows a dialog allowing the user to edit name and email.
   Future<void> _editProfile() async {
     if (_user == null) return;
 
@@ -100,8 +107,10 @@ class _AccountScreenState extends State<AccountScreen> {
                   _user = _user!.copyWith(name: newName, email: newEmail);
                 });
                 await _dbService.saveOrUpdateUser(_user!);
+                if (!mounted) return;
                 Navigator.pop(context);
               } else {
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please enter a valid name and email.')),
                 );
@@ -114,6 +123,7 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  /// Generic selector for user preferences (e.g. currency, sorting).
   Future<void> _selectOption({
     required String title,
     required List<String> options,
@@ -162,86 +172,124 @@ class _AccountScreenState extends State<AccountScreen> {
       );
     }
 
-    final hasProfileImage = _user!.profilePicturePath?.isNotEmpty == true &&
-        File(_user!.profilePicturePath!).existsSync();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Account Settings'),
-        backgroundColor: color.primary,
-        foregroundColor: color.onPrimary,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            GestureDetector(
-              onTap: _pickProfilePicture,
-              child: CircleAvatar(
-                radius: 50,
-                backgroundImage: hasProfileImage
-                    ? FileImage(File(_user!.profilePicturePath!))
-                    : const AssetImage('assets/default_profile.jpg') as ImageProvider,
-                child: !hasProfileImage
+    final path = _user!.profilePicturePath;
+    final hasProfileImage =
+        path != null && path.isNotEmpty && File(path).existsSync();
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Account Settings'),
+            backgroundColor: color.primary,
+            foregroundColor: color.onPrimary,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+            /// Profile picture circle avatar
+                GestureDetector(
+                  onTap: _pickProfilePicture,
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundImage: hasProfileImage
+                    ? FileImage(File(path))
+                    : const AssetImage('assets/default_profile.jpg')
+                        as ImageProvider,
+                    child: !hasProfileImage
                     ? Icon(Icons.camera_alt, size: 30, color: color.onPrimary)
                     : null,
-              ),
-            ),
+                  ),
+                ),
             const SizedBox(height: 16),
+            
+            /// User name
             Text(
               _user!.name,
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style:
+                  theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
+
+            /// User email
             Text(
               _user!.email,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+              style:
+                  theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
             ),
             const SizedBox(height: 10),
+
+            /// Edit profile button
             FilledButton.icon(
               onPressed: _editProfile,
               icon: const Icon(Icons.edit),
               label: const Text('Edit Profile'),
             ),
             const SizedBox(height: 24),
+
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('My Preferences',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              child: Text(
+                'My Preferences',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
             ),
             const SizedBox(height: 8),
+
+            /// Sorting preference
             ListTile(
               leading: const Icon(Icons.sort),
               title: const Text('Sorting'),
-              subtitle: Text(_user!.sorting ?? 'Date'),
+              subtitle: Text(_user!.sorting),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () => _selectOption(
                 title: 'Sorting',
                 options: ['Date', 'Alphabetical', 'Category'],
-                currentValue: _user!.sorting ?? 'Date',
+                currentValue: _user!.sorting,
                 fieldKey: 'sorting',
               ),
             ),
+
+            /// Summary preference
             ListTile(
               leading: const Icon(Icons.summarize),
               title: const Text('Summary'),
-              subtitle: Text(_user!.summary ?? 'Average'),
+              subtitle: Text(_user!.summary),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () => _selectOption(
                 title: 'Summary',
                 options: ['Average', 'Total', 'Detailed'],
-                currentValue: _user!.summary ?? 'Average',
+                currentValue: _user!.summary,
                 fieldKey: 'summary',
               ),
             ),
+
+            /// Default currency preference
             ListTile(
               leading: const Icon(Icons.monetization_on),
               title: const Text('Default Currency'),
-              subtitle: Text(_user!.defaultCurrency ?? 'MYR (RM)'),
+              subtitle: Text(_user!.defaultCurrency),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () => _selectOption(
                 title: 'Currency',
-                options: ['USD (\$)', 'EUR (€)', 'MYR (RM)', 'JPY (¥)'],
-                currentValue: _user!.defaultCurrency ?? 'MYR (RM)',
+                options: [
+                  'USD (\$)',
+                  'EUR (€)',
+                  'MYR (RM)',
+                  'JPY (¥)',
+                ],
+                currentValue: _user!.defaultCurrency,
                 fieldKey: 'defaultCurrency',
               ),
             ),

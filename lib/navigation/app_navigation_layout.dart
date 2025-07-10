@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:projectspendlytic/screens/account/account_screen.dart';
-import 'package:projectspendlytic/screens/expenses/spending_insight_screen.dart';
+import 'package:projectspendlytic/screens/insights/spending_insight_screen.dart';
 import 'package:projectspendlytic/screens/home/home_screen.dart';
 import 'package:projectspendlytic/screens/expenses/log_expenses_screen.dart';
 import 'package:projectspendlytic/screens/budget/budget_tracking.dart';
@@ -62,7 +62,7 @@ class _AppNavigationLayoutState extends State<AppNavigationLayout> {
             icon: Icon(Icons.bar_chart),
             label: 'Insights',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Account'),
         ],
       ),
     );

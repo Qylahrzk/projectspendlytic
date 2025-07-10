@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+
 import '../../services/db_service.dart';
+import '../../services/currency_service.dart';
+// ignore: unused_import
+import '../../models/user_model.dart';
 
 class LogExpensesScreen extends StatefulWidget {
   const LogExpensesScreen({super.key});
@@ -24,9 +28,14 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     'Shopping',
   ];
 
-  double _totalExpenses = 0;
-  Map<String, double> _categoryTotals = {};
+  double _totalExpensesMYR = 0;
+  Map<String, double> _categoryTotalsMYR = {};
   List<Map<String, dynamic>> _expenses = [];
+
+  // Currency info
+  String _currency = 'MYR (RM)';
+  String _currencySymbol = 'RM';
+  double _currencyRate = 1.0;
 
   final Map<String, IconData> _categoryIcons = {
     'General': Icons.category,
@@ -38,14 +47,28 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
   @override
   void initState() {
     super.initState();
+    _loadUserCurrency();
     _fetchExpenses();
+  }
+
+  /// Loads user's currency preference from DB
+  Future<void> _loadUserCurrency() async {
+    final user = await DBService().getUser();
+
+    if (user != null) {
+      final rate = CurrencyService.conversionRates[user.defaultCurrency] ?? 1.0;
+      setState(() {
+        _currency = user.defaultCurrency;
+        _currencyRate = rate;
+        _currencySymbol = CurrencyService.getSymbol(_currency);
+      });
+    }
   }
 
   /// Loads all expenses from the transactions table
   Future<void> _fetchExpenses() async {
     final db = await DBService().database;
 
-    // Only select expenses (not income)
     final data = await db.query(
       'transactions',
       where: 'type = ?',
@@ -65,8 +88,8 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
 
     setState(() {
       _expenses = data;
-      _totalExpenses = total;
-      _categoryTotals = catTotals;
+      _totalExpensesMYR = total;
+      _categoryTotalsMYR = catTotals;
     });
   }
 
@@ -78,7 +101,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
       'title': title,
       'amount': amount,
       'category': category,
-      'type': 'expense', // Important for filtering!
+      'type': 'expense',
       'date': DateTime.now().toIso8601String(),
     };
 
@@ -90,7 +113,6 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
   Future<void> _clearExpenses() async {
     final db = await DBService().database;
 
-    // Only delete rows where type = expense
     await db.delete(
       'transactions',
       where: 'type = ?',
@@ -120,7 +142,9 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
             ),
             TextField(
               controller: _amountController,
-              decoration: const InputDecoration(labelText: 'Amount'),
+              decoration: InputDecoration(
+                labelText: 'Amount ($_currencySymbol)',
+              ),
               keyboardType: TextInputType.number,
             ),
             DropdownButton<String>(
@@ -152,7 +176,8 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
               if (title.isNotEmpty && amountText.isNotEmpty) {
                 final amount = double.tryParse(amountText);
                 if (amount != null) {
-                  _addExpense(title, amount, _selectedCategory);
+                  final amountInMYR = amount / _currencyRate;
+                  _addExpense(title, amountInMYR, _selectedCategory);
                   _titleController.clear();
                   _amountController.clear();
                   Navigator.pop(context);
@@ -214,7 +239,9 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     final title = _extractTitleFromText(text);
     final amount = _extractAmountFromText(text);
     if (title != null && amount != null) {
-      _addExpense(title, amount, 'General');
+      // Save as amount in MYR
+      final amountInMYR = amount / _currencyRate;
+      _addExpense(title, amountInMYR, 'General');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to extract title or amount.')),
@@ -222,7 +249,6 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     }
   }
 
-  /// Extracts a title (first line) from scanned text
   String? _extractTitleFromText(String text) {
     final lines = text.split('\n');
     return lines.isNotEmpty ? lines[0].trim() : null;
@@ -276,8 +302,10 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     );
   }
 
-  /// Card displaying total expenses centered on screen
+  /// Displays the total expenses converted to user's preferred currency
   Widget _buildTotalExpensesCard(ColorScheme colorScheme) {
+    final convertedTotal = _totalExpensesMYR * _currencyRate;
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(vertical: 32),
@@ -305,7 +333,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            "RM ${_totalExpenses.toStringAsFixed(2)}",
+            "$_currencySymbol ${convertedTotal.toStringAsFixed(2)}",
             style: TextStyle(
               color: colorScheme.onPrimary,
               fontWeight: FontWeight.bold,
@@ -317,9 +345,9 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     );
   }
 
-  /// Displays categories as icons with total amounts
+  /// Displays categories as icons with totals converted to user's currency
   Widget _buildCategoryOverview(ColorScheme colorScheme) {
-    if (_categoryTotals.isEmpty) {
+    if (_categoryTotalsMYR.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Text(
@@ -334,8 +362,10 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
       child: Wrap(
         spacing: 16,
         runSpacing: 16,
-        children: _categoryTotals.entries.map((entry) {
+        children: _categoryTotalsMYR.entries.map((entry) {
           final icon = _categoryIcons[entry.key] ?? Icons.category;
+          final convertedTotal = entry.value * _currencyRate;
+
           return Container(
             width: 100,
             decoration: BoxDecoration(
@@ -364,7 +394,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "- RM ${entry.value.toStringAsFixed(2)}",
+                  "- $_currencySymbol ${convertedTotal.toStringAsFixed(2)}",
                   style: TextStyle(
                     color: colorScheme.onSurface,
                     fontSize: 12,
@@ -378,7 +408,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     );
   }
 
-  /// Displays the list of all expense records
+  /// Displays the list of all expense records converted to user's currency
   Widget _buildExpenseList(ColorScheme colorScheme) {
     if (_expenses.isEmpty) {
       return const Padding(
@@ -393,6 +423,9 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
       itemCount: _expenses.length,
       itemBuilder: (context, index) {
         final exp = _expenses[index];
+        final convertedAmount =
+            (exp['amount'] as double? ?? 0) * _currencyRate;
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
@@ -413,7 +446,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
               style: TextStyle(color: colorScheme.onSurface),
             ),
             trailing: Text(
-              'RM ${exp['amount'].toStringAsFixed(2)}',
+              '$_currencySymbol ${convertedAmount.toStringAsFixed(2)}',
               style: TextStyle(
                 color: colorScheme.primary,
                 fontWeight: FontWeight.bold,
