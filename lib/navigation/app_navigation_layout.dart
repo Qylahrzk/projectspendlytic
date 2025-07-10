@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:projectspendlytic/screens/account/account_screen.dart';
+import 'package:projectspendlytic/screens/expenses/spending_insight_screen.dart';
 import 'package:projectspendlytic/screens/home/home_screen.dart';
 import 'package:projectspendlytic/screens/expenses/log_expenses_screen.dart';
 import 'package:projectspendlytic/screens/budget/budget_tracking.dart';
@@ -34,7 +35,7 @@ class _AppNavigationLayoutState extends State<AppNavigationLayout> {
     HomeScreen(),
     LogExpensesScreen(),
     BudgetTrackingScreen(),
-    PlaceholderScreen('Spending Insights'),
+    SpendingInsightScreen(),
     AccountScreen(),
   ];
 
@@ -52,9 +53,15 @@ class _AppNavigationLayoutState extends State<AppNavigationLayout> {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_box), label: 'Log Expense'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_box),
+            label: 'Log Expense',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.wallet), label: 'Budget'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Insights'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Insights',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
