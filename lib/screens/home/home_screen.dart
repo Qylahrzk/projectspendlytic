@@ -24,8 +24,10 @@ class _HomeScreenState extends State<HomeScreen> {
   double balance = 0; // User's total balance
   double spend = 0; // Total spending
   double profit = 0; // Total profit
-  Map<String, double> categoryTotals = {}; // Map to store total spend per category
-  List<Map<String, dynamic>> recentTransactions = []; // List of recent transactions
+  Map<String, double> categoryTotals =
+      {}; // Map to store total spend per category
+  List<Map<String, dynamic>> recentTransactions =
+      []; // List of recent transactions
   String formattedDate = ''; // Formatted current date (e.g., "09 JULY")
   String dayOfWeek = ''; // Current day of the week (e.g., "WEDNESDAY")
 
@@ -109,7 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const AuthLayout()),
-      (route) => false, // This predicate ensures all previous routes are removed
+      (route) =>
+          false, // This predicate ensures all previous routes are removed
     );
   }
 
@@ -120,14 +123,25 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) {
         return SafeArea(
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Make the column as tall as its children
+            mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.logout), // Logout icon
-                title: const Text("Logout"), // Logout text
+                leading: const Icon(Icons.settings), // Settings icon
+                title: const Text("Settings"),
                 onTap: () {
-                  Navigator.pop(context); // Close the bottom sheet first
-                  _logout(); // Call the logout function
+                  Navigator.pop(context); // Close the bottom sheet
+                  Navigator.pushNamed(
+                    context,
+                    '/settings',
+                  ); // Navigate to settings screen
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout), // Logout icon
+                title: const Text("Logout"),
+                onTap: () {
+                  Navigator.pop(context); // Close the bottom sheet
+                  _logout(); // Perform logout
                 },
               ),
             ],
@@ -139,9 +153,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Navigates to a dummy notification screen.
   void _goToNotifications() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const NotificationScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NotificationScreen()));
   }
 
   @override
@@ -150,7 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor, // Set background color
+      backgroundColor:
+          Theme.of(context).scaffoldBackgroundColor, // Set background color
       body: SingleChildScrollView(
         // Makes the content scrollable if it exceeds screen height
         child: Column(
@@ -182,13 +197,20 @@ class _HomeScreenState extends State<HomeScreen> {
           bottomRight: Radius.circular(32),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 48, 16, 24), // Padding around content
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        48,
+        16,
+        24,
+      ), // Padding around content
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // Align children to the start
+        crossAxisAlignment:
+            CrossAxisAlignment.start, // Align children to the start
         children: [
           // Top row containing app logo and action icons
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween, // Space items evenly
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween, // Space items evenly
             children: [
               Image.asset(
                 "assets/images/app_logo.png", // Path to app logo asset
@@ -205,7 +227,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: _goToNotifications, // Navigate to notifications
                   ),
                   IconButton(
-                    icon: const Icon(Icons.menu, color: Colors.white), // White menu icon
+                    icon: const Icon(
+                      Icons.menu,
+                      color: Colors.white,
+                    ), // White menu icon
                     onPressed: _showDrawerMenu, // Show drawer/bottom sheet menu
                   ),
                 ],
@@ -213,7 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 16), // Spacer
-
           // Second row containing welcome message, location, date, and Lottie animation
           Row(
             children: [
@@ -269,16 +293,25 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16), // Rounded corners
         gradient: LinearGradient(
-          colors: [colorScheme.primary, colorScheme.secondary], // Gradient background
+          colors: [
+            colorScheme.primary,
+            colorScheme.secondary,
+          ], // Gradient background
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24), // Padding inside the card
+      padding: const EdgeInsets.symmetric(
+        vertical: 16,
+        horizontal: 24,
+      ), // Padding inside the card
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween, // Space items evenly
         children: [
-          _balanceItem("My Balance", balance), // Individual balance item for total
+          _balanceItem(
+            "My Balance",
+            balance,
+          ), // Individual balance item for total
           _balanceItem("Spend", spend), // Individual balance item for spend
           _balanceItem("Profit", profit), // Individual balance item for profit
         ],
@@ -313,11 +346,14 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.all(16), // Margin around the card
       child: Card(
         color: colorScheme.surface, // Card background color
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Rounded corners
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ), // Rounded corners
         child: Padding(
           padding: const EdgeInsets.all(16), // Padding inside the card
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, // Align children to the start
+            crossAxisAlignment:
+                CrossAxisAlignment.start, // Align children to the start
             children: [
               Text(
                 "Expenses - Daily Overview", // Section title
@@ -331,48 +367,53 @@ class _HomeScreenState extends State<HomeScreen> {
               // Conditional rendering based on whether categoryTotals is empty
               categoryTotals.isEmpty
                   ? Text(
-                      "No expenses found.", // Message if no expenses
-                      style: TextStyle(color: colorScheme.onSurface),
-                    )
+                    "No expenses found.", // Message if no expenses
+                    style: TextStyle(color: colorScheme.onSurface),
+                  )
                   : Wrap(
-                      spacing: 16, // Horizontal spacing between items
-                      runSpacing: 16, // Vertical spacing between lines of items
-                      children: categoryTotals.entries.map((entry) {
-                        return Column(
-                          mainAxisSize: MainAxisSize.min, // Shrink column to content size
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              // Blended color for the circle avatar background
-                              backgroundColor: Color.lerp(
-                                colorScheme.primary,
-                                Colors.transparent,
-                                0.8, // 80% transparent primary color
+                    spacing: 16, // Horizontal spacing between items
+                    runSpacing: 16, // Vertical spacing between lines of items
+                    children:
+                        categoryTotals.entries.map((entry) {
+                          return Column(
+                            mainAxisSize:
+                                MainAxisSize
+                                    .min, // Shrink column to content size
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                // Blended color for the circle avatar background
+                                backgroundColor: Color.lerp(
+                                  colorScheme.primary,
+                                  Colors.transparent,
+                                  0.8, // 80% transparent primary color
+                                ),
+                                child: Icon(
+                                  Icons.pie_chart, // Icon for categories
+                                  color: colorScheme.primary, // Icon color
+                                ),
                               ),
-                              child: Icon(
-                                Icons.pie_chart, // Icon for categories
-                                color: colorScheme.primary, // Icon color
+                              const SizedBox(height: 4), // Spacer
+                              Text(
+                                entry.key, // Category name
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colorScheme.onSurface, // Text color
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4), // Spacer
-                            Text(
-                              entry.key, // Category name
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurface, // Text color
+                              Text(
+                                "-RM ${entry.value.toStringAsFixed(2)}", // Formatted expense amount
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      Colors
+                                          .redAccent, // Red color for expenses
+                                ),
                               ),
-                            ),
-                            Text(
-                              "-RM ${entry.value.toStringAsFixed(2)}", // Formatted expense amount
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.redAccent, // Red color for expenses
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                            ],
+                          );
+                        }).toList(),
+                  ),
             ],
           ),
         ),
@@ -386,11 +427,14 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.all(16), // Margin around the card
       child: Card(
         color: colorScheme.surface, // Card background color
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Rounded corners
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ), // Rounded corners
         child: Padding(
           padding: const EdgeInsets.all(16), // Padding inside the card
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, // Align children to the start
+            crossAxisAlignment:
+                CrossAxisAlignment.start, // Align children to the start
             children: [
               Text(
                 "Recent Transactions", // Section title
@@ -404,37 +448,43 @@ class _HomeScreenState extends State<HomeScreen> {
               // Conditional rendering based on whether recentTransactions is empty
               recentTransactions.isEmpty
                   ? Text(
-                      "No transactions found.", // Message if no transactions
-                      style: TextStyle(color: colorScheme.onSurface),
-                    )
+                    "No transactions found.", // Message if no transactions
+                    style: TextStyle(color: colorScheme.onSurface),
+                  )
                   : Column(
-                      children: recentTransactions.map((tx) {
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 4,
-                          ), // Padding for list tile content
-                          leading: Icon(
-                            Icons.receipt_long, // Icon for transactions
-                            color: colorScheme.primary, // Icon color
-                          ),
-                          title: Text(
-                            tx["title"] ?? "", // Transaction title
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface, // Text color
+                    children:
+                        recentTransactions.map((tx) {
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 4,
+                            ), // Padding for list tile content
+                            leading: Icon(
+                              Icons.receipt_long, // Icon for transactions
+                              color: colorScheme.primary, // Icon color
                             ),
-                          ),
-                          subtitle: Text(
-                            tx["category"] ?? "Uncategorized", // Transaction category
-                            style: TextStyle(color: colorScheme.onSurface), // Text color
-                          ),
-                          trailing: Text(
-                            "-RM ${tx["amount"].toStringAsFixed(2)}", // Formatted transaction amount
-                            style: const TextStyle(color: Colors.redAccent), // Red color for amount
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                            title: Text(
+                              tx["title"] ?? "", // Transaction title
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface, // Text color
+                              ),
+                            ),
+                            subtitle: Text(
+                              tx["category"] ??
+                                  "Uncategorized", // Transaction category
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                              ), // Text color
+                            ),
+                            trailing: Text(
+                              "-RM ${tx["amount"].toStringAsFixed(2)}", // Formatted transaction amount
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                              ), // Red color for amount
+                            ),
+                          );
+                        }).toList(),
+                  ),
             ],
           ),
         ),

@@ -37,9 +37,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (passController.text.trim() != confirmPassController.text.trim()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Passwords do not match.")));
       return;
     }
 
@@ -66,9 +66,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Sign-up failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Sign-up failed: $e")));
     } finally {
       setState(() => isLoading = false);
     }
@@ -99,7 +99,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   "Let’s get started!",
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onBackground,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -107,7 +107,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 /// Full Name
                 TextFormField(
                   controller: nameController,
-                  validator: (val) => val!.trim().isEmpty ? 'Enter your name' : null,
+                  validator:
+                      (val) => val!.trim().isEmpty ? 'Enter your name' : null,
                   decoration: _inputDecoration(
                     context,
                     hint: 'Full Name',
@@ -119,7 +120,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 /// Email
                 TextFormField(
                   controller: emailController,
-                  validator: (val) => val!.contains('@') ? null : 'Enter a valid email',
+                  validator:
+                      (val) =>
+                          val!.contains('@') ? null : 'Enter a valid email',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Email',
@@ -133,7 +136,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 TextFormField(
                   controller: passController,
                   obscureText: !showPassword,
-                  validator: (val) => val!.length >= 6 ? null : 'Min 6 characters',
+                  validator:
+                      (val) => val!.length >= 6 ? null : 'Min 6 characters',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Password',
@@ -143,8 +147,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         showPassword ? Icons.visibility : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed: () =>
-                          setState(() => showPassword = !showPassword),
+                      onPressed:
+                          () => setState(() => showPassword = !showPassword),
                     ),
                   ),
                 ),
@@ -174,8 +178,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed: () => setState(
-                          () => showConfirmPassword = !showConfirmPassword),
+                      onPressed:
+                          () => setState(
+                            () => showConfirmPassword = !showConfirmPassword,
+                          ),
                     ),
                   ),
                 ),
@@ -186,20 +192,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   onPressed: isLoading ? null : signUp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colorScheme.primary,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 14,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(
-                          color: Colors.white,
-                        )
-                      : const Text(
-                          'SIGN UP',
-                          style: TextStyle(color: Colors.white),
-                        ),
+                  child:
+                      isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                            'SIGN UP',
+                            style: TextStyle(color: Colors.white),
+                          ),
                 ),
 
                 const SizedBox(height: 16),
