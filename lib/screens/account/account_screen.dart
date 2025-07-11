@@ -177,7 +177,13 @@ class _AccountScreenState extends State<AccountScreen> {
         path != null && path.isNotEmpty && File(path).existsSync();
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Account Settings'),
+            title: const Text(
+              "ACCOUNT",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             backgroundColor: color.primary,
             foregroundColor: color.onPrimary,
             actions: [

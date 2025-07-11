@@ -232,6 +232,8 @@ class _BudgetTrackingScreenState extends State<BudgetTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme;
     final colorScheme = Theme.of(context).colorScheme;
     final totalBudget = _convert(_getTotalBudgetMYR());
     final totalSpent = _convert(_getTotalSpentMYR());
@@ -239,7 +241,15 @@ class _BudgetTrackingScreenState extends State<BudgetTrackingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Budget Tracking'),
+        title: const Text(
+              "BUDGET TRACKING",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: color.primary,
+            foregroundColor: color.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete),

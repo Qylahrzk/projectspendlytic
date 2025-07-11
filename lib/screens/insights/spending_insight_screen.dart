@@ -100,11 +100,21 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Statistic'),
+        title: const Text(
+              "SPENDING INSIGHTS",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: color.primary,
+            foregroundColor: color.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_today),

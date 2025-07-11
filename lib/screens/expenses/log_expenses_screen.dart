@@ -267,13 +267,22 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: colorScheme.primary,
-        title: const Text('Log Expenses'),
+        title: const Text(
+              "LOG EXPENSES",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: color.primary,
+            foregroundColor: color.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete),

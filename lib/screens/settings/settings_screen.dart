@@ -192,21 +192,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: colorScheme.primary,
-        elevation: 0,
-        title: Text(
-          'Settings'.tr(),
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 24,
-            color: Colors.white,
+            title: const Text(
+              "SETTINGS",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: color.primary,
+            foregroundColor: color.onPrimary,
           ),
-        ),
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
