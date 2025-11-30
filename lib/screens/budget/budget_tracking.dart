@@ -112,6 +112,7 @@ class _BudgetTrackingScreenState extends State<BudgetTrackingScreen> {
     String? selectedCategory;
     final amountController = TextEditingController();
 
+// Initialize the amount controller with an empty string
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -203,6 +204,7 @@ class _BudgetTrackingScreenState extends State<BudgetTrackingScreen> {
     }
   }
 
+// Expense tracking for the current week
   List<DateTime> get _daysOfCurrentWeek =>
       List.generate(7, (i) => _currentWeekStart.add(Duration(days: i)));
 
@@ -413,6 +415,8 @@ class _BudgetTrackingScreenState extends State<BudgetTrackingScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
       ),
+
+      //Indicate the budget status
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
-// ignore: unused_import
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔔 NEW
+import 'package:supabase_flutter/supabase_flutter.dart';     // 🚀 NEW
 
 import '../../services/db_service.dart';
 import '../../services/auth_service.dart';
@@ -38,7 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final DBService _dbService = DBService();
   final AuthService _authService = AuthService();
 
-  /// Map categories to icons
   final Map<String, IconData> categoryIcons = {
     'Food': Icons.restaurant,
     'Shopping': Icons.shopping_cart,
@@ -50,9 +48,31 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _saveDeviceToken(); // 🔔 CRITICAL: Save Token on startup
     _loadDate();
     _loadUserData();
     _loadHomeData();
+  }
+
+  /// 🔔 NEW: Save FCM Token to Supabase so notifications work
+  Future<void> _saveDeviceToken() async {
+    try {
+      // 1. Get the Notification Address (Token) from Firebase
+      String? token = await FirebaseMessaging.instance.getToken();
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+
+      if (token != null && userId != null) {
+        // 2. Save it to Supabase 'profiles' table
+        await Supabase.instance.client.from('profiles').upsert({
+          'id': userId,
+          'fcm_token': token,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+        debugPrint("✅ FCM Token saved to Supabase: $token");
+      }
+    } catch (e) {
+      debugPrint("❌ Error saving token: $e");
+    }
   }
 
   Future<void> _loadDate() async {
@@ -70,9 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
           userName = userData.name;
           if (userData.defaultCurrency.isNotEmpty) {
             currencySymbol = CurrencyService.getSymbol(userData.defaultCurrency);
-            currencyRate = CurrencyService.conversionRates[
-              userData.defaultCurrency
-            ] ?? 1.0;
+            currencyRate = CurrencyService.conversionRates[userData.defaultCurrency] ?? 1.0;
           } else {
             currencySymbol = "RM";
             currencyRate = 1.0;
@@ -164,9 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => AlertDialog(
         title: const Text("Notifications"),
         content: isOverBudget
-            ? Text(
-                "⚠️ You’ve exceeded your monthly budget of ${formatCurrency(budget)}.",
-              )
+            ? Text("⚠️ You’ve exceeded your monthly budget of ${formatCurrency(budget)}.")
             : const Text("No new notifications."),
         actions: [
           TextButton(
@@ -243,30 +259,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Row(
                 children: [
-                  Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications_none, color: Colors.white),
-                        onPressed: _showNotificationDialog,
-                      ),
-                      if (isOverBudget)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: CircleAvatar(
-                            radius: 6,
-                            backgroundColor: Colors.red,
-                          ),
-                        ),
-                    ],
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none, color: Colors.white),
+                    onPressed: _showNotificationDialog,
                   ),
                   Consumer<ThemeNotifier>(
                     builder: (context, themeNotifier, _) {
                       return IconButton(
                         icon: Icon(
-                          themeNotifier.isDarkMode
-                              ? Icons.dark_mode
-                              : Icons.light_mode,
+                          themeNotifier.isDarkMode ? Icons.dark_mode : Icons.light_mode,
                           color: Colors.white,
                         ),
                         onPressed: () {
@@ -292,28 +293,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       "Welcome back - $userName",
-                      style: const TextStyle(
-                        fontSize: 24,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       location,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        color: Colors.white70,
-                      ),
+                      style: const TextStyle(fontSize: 20, color: Colors.white70),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       "${formattedDate.toUpperCase()} | ${dayOfWeek.toUpperCase()}",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: const TextStyle(fontSize: 18, color: Colors.white70, fontWeight: FontWeight.w800),
                     ),
                   ],
                 ),

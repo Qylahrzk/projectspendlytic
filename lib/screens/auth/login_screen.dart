@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Added Supabase import
 
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
@@ -33,25 +34,30 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Email login flow
+  /// 🔐 Email login flow (Updated for Supabase)
   Future<void> loginWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => isLoading = true);
     try {
-      final cred = await auth.signIn(
+      // 1. Supabase Sign In
+      final AuthResponse response = await auth.signIn(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
+      // 2. Save Session to Local SQLite (Backup)
       await DBService().saveUserData(
-        email: cred.user?.email ?? '',
-        name: cred.user?.displayName ?? '',
-        provider: 'firebase',
+        email: response.user?.email ?? '',
+        // Supabase stores name in userMetadata, not directly on the user object
+        name: response.user?.userMetadata?['display_name'] ?? 'User', 
+        provider: 'supabase',
       );
 
       if (!mounted) return;
 
+      // 3. Reset App to AuthLayout
+      // This will trigger the StreamBuilder -> Check Session -> Show Biometric Lock
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AuthLayout()),
@@ -59,33 +65,42 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login failed: ${e.toString()}")), // Converted to string for safety
+      );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  /// Google login flow
+  /// 🔐 Google login flow (Updated for Supabase)
   Future<void> loginWithGoogle() async {
     setState(() => isLoading = true);
     try {
-      await googleAuth.signInWithGoogle(context);
-      if (!mounted) return;
+      // 1. Google Sign In (Token Exchange)
+      final AuthResponse? response = await googleAuth.signInWithGoogle(context);
+      
+      // If user cancelled or failed
+      if (response == null || response.user == null) {
+        setState(() => isLoading = false);
+        return;
+      }
 
+      // 2. Navigation
+      if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const AuthLayout()),
         (_) => false,
       );
+
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Google login failed: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Google login failed: $e")),
+      );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -122,8 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 /// Email field
                 TextFormField(
                   controller: emailController,
-                  validator:
-                      (val) => val!.contains('@') ? null : 'Enter valid email',
+                  validator: (val) => val!.contains('@') ? null : 'Enter valid email',
                   keyboardType: TextInputType.emailAddress,
                   decoration: _inputDecoration(
                     context,
@@ -137,8 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextFormField(
                   controller: passwordController,
                   obscureText: !showPassword,
-                  validator:
-                      (val) => val!.length >= 6 ? null : 'Min 6 characters',
+                  validator: (val) => val!.length >= 6 ? null : 'Min 6 characters',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Password',
@@ -148,8 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         showPassword ? Icons.visibility : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed:
-                          () => setState(() => showPassword = !showPassword),
+                      onPressed: () => setState(() => showPassword = !showPassword),
                     ),
                   ),
                 ),
@@ -168,13 +180,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child:
-                      isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                            'LOGIN WITH EMAIL',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'LOGIN WITH EMAIL',
+                          style: TextStyle(color: Colors.white),
+                        ),
                 ),
 
                 const SizedBox(height: 16),

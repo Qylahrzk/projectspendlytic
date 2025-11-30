@@ -271,6 +271,7 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
     final color = theme.colorScheme;
     final colorScheme = Theme.of(context).colorScheme;
 
+//AppBar with title and actions
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -330,6 +331,8 @@ class _LogExpensesScreenState extends State<LogExpensesScreen> {
         ),
         borderRadius: BorderRadius.circular(16),
       ),
+
+      // This is the total expenses card (Gradient)
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

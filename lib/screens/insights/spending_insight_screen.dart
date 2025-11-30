@@ -136,6 +136,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     );
   }
 
+//Toggle between Expense and Savings
   Widget _buildToggle(ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -175,6 +176,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     );
   }
 
+//Month Picker and Total Display 
   Widget _buildMonthAndTotal(ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -194,6 +196,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     );
   }
 
+// Bar Chart Display
   Widget _buildBarChart() {
     return SizedBox(
       height: 220,
@@ -249,6 +252,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     );
   }
 
+// Category Cards Display
   Widget _buildCategoryCards() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -283,6 +287,7 @@ class _SpendingInsightScreenState extends State<SpendingInsightScreen> {
     );
   }
 
+// Recent Transaction Display
   Widget _buildRecentTransaction(ColorScheme colorScheme) {
     if (_recentTransactions.isEmpty) return const SizedBox();
     final tx = _recentTransactions.first;

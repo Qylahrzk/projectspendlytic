@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // 🚀 Supabase imports
 
 import '../../services/auth_service.dart';
 import '../../services/db_service.dart';
-import '../home/home_screen.dart';
+import '../../widgets/auth_layout.dart'; // 🔄 Navigate here, not HomeScreen
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -13,7 +14,7 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
-  final auth = AuthService();
+  final auth = AuthService(); // This uses your new Supabase AuthService
 
   final nameController = TextEditingController();
   final emailController = TextEditingController();
@@ -33,44 +34,52 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  /// 🚀 Handle Supabase Registration
   Future<void> signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (passController.text.trim() != confirmPassController.text.trim()) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Passwords do not match.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Passwords do not match.")),
+      );
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
-      final cred = await auth.createAccount(
+      // 1. Create User in Supabase
+      // Your AuthService.createAccount now returns an AuthResponse
+      final AuthResponse response = await auth.createAccount(
         email: emailController.text.trim(),
         password: passController.text.trim(),
+        name: nameController.text.trim(), // Passes name to user_metadata
       );
 
-      // Save user to SQLite using DBService
+      // 2. Save User to Local SQLite
       await DBService().saveUserData(
-        email: cred.user?.email ?? '',
+        email: response.user?.email ?? '',
         name: nameController.text.trim(),
-        provider: 'firebase',
+        provider: 'supabase', // 🟢 Changed from 'firebase' to 'supabase'
       );
 
       if (!mounted) return;
 
-      // Navigate to home
-      Navigator.pushReplacement(
+      // 3. Navigate to AuthLayout (The Gatekeeper)
+      // This ensures the Biometric Lock screen appears immediately
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const AuthLayout()),
+        (route) => false,
       );
+      
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Sign-up failed: $e")));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Sign-up failed: $e")),
+      );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -107,8 +116,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 /// Full Name
                 TextFormField(
                   controller: nameController,
-                  validator:
-                      (val) => val!.trim().isEmpty ? 'Enter your name' : null,
+                  validator: (val) => val!.trim().isEmpty ? 'Enter your name' : null,
                   decoration: _inputDecoration(
                     context,
                     hint: 'Full Name',
@@ -120,9 +128,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 /// Email
                 TextFormField(
                   controller: emailController,
-                  validator:
-                      (val) =>
-                          val!.contains('@') ? null : 'Enter a valid email',
+                  validator: (val) =>
+                      val!.contains('@') ? null : 'Enter a valid email',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Email',
@@ -136,8 +143,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 TextFormField(
                   controller: passController,
                   obscureText: !showPassword,
-                  validator:
-                      (val) => val!.length >= 6 ? null : 'Min 6 characters',
+                  validator: (val) => val!.length >= 6 ? null : 'Min 6 characters',
                   decoration: _inputDecoration(
                     context,
                     hint: 'Password',
@@ -147,8 +153,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         showPassword ? Icons.visibility : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed:
-                          () => setState(() => showPassword = !showPassword),
+                      onPressed: () => setState(() => showPassword = !showPassword),
                     ),
                   ),
                 ),
@@ -178,16 +183,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             : Icons.visibility_off,
                         color: colorScheme.primary,
                       ),
-                      onPressed:
-                          () => setState(
-                            () => showConfirmPassword = !showConfirmPassword,
-                          ),
+                      onPressed: () => setState(
+                        () => showConfirmPassword = !showConfirmPassword,
+                      ),
                     ),
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
+                /// Sign Up Button
                 ElevatedButton(
                   onPressed: isLoading ? null : signUp,
                   style: ElevatedButton.styleFrom(
@@ -200,17 +205,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child:
-                      isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                            'SIGN UP',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'SIGN UP',
+                          style: TextStyle(color: Colors.white),
+                        ),
                 ),
 
                 const SizedBox(height: 16),
 
+                /// Navigate to Login
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: Text(
@@ -226,7 +231,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  /// Helper for consistent input styling
   InputDecoration _inputDecoration(
     BuildContext context, {
     required String hint,

@@ -2,6 +2,7 @@ import 'package:projectspendlytic/models/user_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // 🚀 Supabase
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -15,6 +16,7 @@ class DBService {
   static const String budgetTable = 'budgets';
 
   Database? _db;
+  final _supabase = Supabase.instance.client; // 🚀 Access Supabase Client
 
   Future<Database> get database async {
     _db ??= await _initDB();
@@ -90,14 +92,7 @@ class DBService {
     ''');
   }
 
-  Future<void> deleteDatabaseFile() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, _dbName);
-    await deleteDatabase(path);
-    if (kDebugMode) {
-      debugPrint("Database deleted.");
-    }
-  }
+  // ... (User Methods) ...
 
   Future<void> saveUserData({
     required String email,
@@ -123,16 +118,7 @@ class DBService {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
-
-  Future<void> updateUserName(String newName) async {
-    final db = await database;
-    await db.update(
-      _userTable,
-      {'name': newName},
-      where: 'name IS NOT NULL',
-    );
-  }
-
+  
   Future<UserModel?> getUser() async {
     final db = await database;
     final result = await db.query(_userTable, limit: 1);
@@ -170,16 +156,53 @@ class DBService {
     return result.isNotEmpty;
   }
 
-  // ✅ NEW METHODS FOR HOME SCREEN
+  // ============================================================
+  // 🚀 TRANSACTION METHODS (Syncing to Supabase)
+  // ============================================================
 
-  /// Get total budget across all categories
+  /// ✅ Add Transaction (Writes to Local + Cloud)
+  Future<void> addTransaction({
+    required String title,
+    required double amount,
+    required String category,
+    required String type, // 'expense' or 'income'
+    required DateTime date,
+  }) async {
+    final db = await database;
+    
+    // 1. Save to SQLite (Local)
+    await db.insert(transactionTable, {
+      'title': title,
+      'amount': amount,
+      'category': category,
+      'type': type,
+      'date': date.toIso8601String(),
+    });
+
+    // 2. Save to Supabase (Cloud) -> THIS TRIGGERS THE NOTIFICATION
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        await _supabase.from('transactions').insert({
+          'user_id': user.id,
+          'title': title,
+          'amount': amount,
+          'category': category,
+          'transaction_date': date.toIso8601String(),
+        });
+        debugPrint("✅ Transaction synced to Supabase");
+      } catch (e) {
+        debugPrint("⚠️ Failed to sync to Supabase (Offline?): $e");
+      }
+    }
+  }
+
   Future<double> getTotalBudget() async {
     final db = await database;
     final result = await db.rawQuery('SELECT SUM(amount) as total FROM $budgetTable');
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// Get total expense transactions
   Future<double> getTotalSpend() async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -190,20 +213,17 @@ class DBService {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// Fetch recent expense transactions
   Future<List<Map<String, dynamic>>> getRecentExpenses(int limit) async {
     final db = await database;
-    final result = await db.query(
+    return await db.query(
       transactionTable,
       where: 'type = ?',
       whereArgs: ['expense'],
       orderBy: 'date DESC',
       limit: limit,
     );
-    return result;
   }
 
-  /// Group expenses by category
   Future<Map<String, double>> getCategoryTotals() async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -223,13 +243,60 @@ class DBService {
     return totals;
   }
 
-  /// Get default currency
-  Future<String> getDefaultCurrency() async {
-    final user = await getUser();
-    return user?.defaultCurrency ?? 'MYR (RM)';
+  Future<void> updateUserName(String newName) async {
+    final db = await database;
+    await db.update(
+      _userTable,
+      {'name': newName},
+      where: 'name IS NOT NULL',
+    );
   }
 
-  /// Get daily sums of expenses
+  // ============================================================
+  // 🚀 BUDGET METHODS (Syncing to Supabase)
+  // ============================================================
+
+  /// ✅ Set Budget (Writes to Local + Cloud)
+  Future<void> setBudget(String category, double amount) async {
+    final db = await database;
+    
+    // 1. SQLite
+    await db.insert(
+      budgetTable,
+      {
+        'category': category,
+        'amount': amount,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    // 2. Supabase 🚀
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        await _supabase.from('budgets').upsert({
+          'user_id': user.id,
+          'category': category,
+          'amount': amount,
+        }, onConflict: 'user_id, category'); 
+        debugPrint("✅ Budget synced to Supabase for $category");
+      } catch (e) {
+        debugPrint("⚠️ Failed to sync budget: $e");
+      }
+    }
+  }
+
+  /// Get all budgets (Local)
+  Future<Map<String, double>> getBudgets() async {
+    final db = await database;
+    final result = await db.query(budgetTable);
+    return {
+      for (var row in result)
+        row['category'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
+    };
+  }
+
+  /// Get daily expense sums (Required for Budget Chart)
   Future<Map<DateTime, double>> getDailyExpenseSums() async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -247,28 +314,5 @@ class DBService {
       sums[DateTime(day.year, day.month, day.day)] = total;
     }
     return sums;
-  }
-
-  /// Save or update a budget for a category
-  Future<void> setBudget(String category, double amount) async {
-    final db = await database;
-    await db.insert(
-      budgetTable,
-      {
-        'category': category,
-        'amount': amount,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  /// Get all budgets
-  Future<Map<String, double>> getBudgets() async {
-    final db = await database;
-    final result = await db.query(budgetTable);
-    return {
-      for (var row in result)
-        row['category'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
-    };
   }
 }

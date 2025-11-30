@@ -186,6 +186,8 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
             backgroundColor: color.primary,
             foregroundColor: color.onPrimary,
+            
+            //enable the settings button
             actions: [
               IconButton(
                 icon: const Icon(Icons.settings),
