@@ -2,7 +2,6 @@ import 'package:projectspendlytic/models/user_model.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // 🚀 Supabase
 
 class DBService {
   static final DBService _instance = DBService._internal();
@@ -16,7 +15,6 @@ class DBService {
   static const String budgetTable = 'budgets';
 
   Database? _db;
-  final _supabase = Supabase.instance.client; // 🚀 Access Supabase Client
 
   Future<Database> get database async {
     _db ??= await _initDB();
@@ -29,7 +27,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5, // 🔔 UPDATED VERSION
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -38,6 +36,7 @@ class DBService {
           await db.execute('DROP TABLE IF EXISTS $_userTable');
           await _createTables(db);
         }
+
         if (oldVersion < 4) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS $budgetTable (
@@ -46,6 +45,13 @@ class DBService {
               amount REAL
             )
           ''');
+        }
+
+        // 🔔 ADD FCM TOKEN SUPPORT
+        if (oldVersion < 5) {
+          await db.execute(
+            'ALTER TABLE $_userTable ADD COLUMN fcmToken TEXT',
+          );
         }
       },
     );
@@ -61,7 +67,8 @@ class DBService {
         defaultCurrency TEXT,
         sorting TEXT,
         summary TEXT,
-        profilePicturePath TEXT
+        profilePicturePath TEXT,
+        fcmToken TEXT
       );
     ''');
 
@@ -92,8 +99,17 @@ class DBService {
     ''');
   }
 
-  // ... (User Methods) ...
+  /// 🧹 Delete entire database (debug/testing)
+  Future<void> deleteDatabaseFile() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, _dbName);
+    await deleteDatabase(path);
+    if (kDebugMode) {
+      debugPrint("🗑 Database deleted.");
+    }
+  }
 
+  /// 👤 Save user data
   Future<void> saveUserData({
     required String email,
     String? name,
@@ -118,7 +134,18 @@ class DBService {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
-  
+
+  /// ✏️ Update username
+  Future<void> updateUserName(String newName) async {
+    final db = await database;
+    await db.update(
+      _userTable,
+      {'name': newName},
+      where: 'email IS NOT NULL',
+    );
+  }
+
+  /// 📥 Get user
   Future<UserModel?> getUser() async {
     final db = await database;
     final result = await db.query(_userTable, limit: 1);
@@ -126,13 +153,13 @@ class DBService {
       try {
         return UserModel.fromMap(result.first);
       } catch (e) {
-        debugPrint("Error parsing user data: $e");
-        return null;
+        debugPrint("❌ Error parsing user data: $e");
       }
     }
     return null;
   }
 
+  /// 🔄 Save or update user
   Future<void> saveOrUpdateUser(UserModel newUser) async {
     final db = await database;
     await db.insert(
@@ -142,6 +169,7 @@ class DBService {
     );
   }
 
+  /// 🚪 Clear session
   Future<void> clearUserData() async {
     final db = await database;
     await db.delete(_userTable);
@@ -150,56 +178,48 @@ class DBService {
     await db.delete(budgetTable);
   }
 
+  /// 🔐 Check login session
   Future<bool> hasSession() async {
     final db = await database;
     final result = await db.query(_userTable, limit: 1);
     return result.isNotEmpty;
   }
 
-  // ============================================================
-  // 🚀 TRANSACTION METHODS (Syncing to Supabase)
-  // ============================================================
+  // =========================
+  // 🔔 FCM TOKEN SUPPORT
+  // =========================
 
-  /// ✅ Add Transaction (Writes to Local + Cloud)
-  Future<void> addTransaction({
-    required String title,
-    required double amount,
-    required String category,
-    required String type, // 'expense' or 'income'
-    required DateTime date,
+  /// 🔔 Save Firebase Cloud Messaging token locally
+  Future<void> saveDeviceToken({
+    required String userId, // kept for API compatibility
+    required String token,
   }) async {
     final db = await database;
-    
-    // 1. Save to SQLite (Local)
-    await db.insert(transactionTable, {
-      'title': title,
-      'amount': amount,
-      'category': category,
-      'type': type,
-      'date': date.toIso8601String(),
-    });
 
-    // 2. Save to Supabase (Cloud) -> THIS TRIGGERS THE NOTIFICATION
-    final user = _supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        await _supabase.from('transactions').insert({
-          'user_id': user.id,
-          'title': title,
-          'amount': amount,
-          'category': category,
-          'transaction_date': date.toIso8601String(),
-        });
-        debugPrint("✅ Transaction synced to Supabase");
-      } catch (e) {
-        debugPrint("⚠️ Failed to sync to Supabase (Offline?): $e");
+    try {
+      await db.update(
+        _userTable,
+        {'fcmToken': token},
+        where: 'email IS NOT NULL',
+      );
+
+      if (kDebugMode) {
+        debugPrint("✅ FCM token saved locally: $token");
       }
+    } catch (e) {
+      debugPrint("❌ Failed to save FCM token: $e");
     }
   }
 
+  // =========================
+  // 📊 HOME SCREEN METHODS
+  // =========================
+
   Future<double> getTotalBudget() async {
     final db = await database;
-    final result = await db.rawQuery('SELECT SUM(amount) as total FROM $budgetTable');
+    final result = await db.rawQuery(
+      'SELECT SUM(amount) as total FROM $budgetTable',
+    );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
@@ -232,71 +252,21 @@ class DBService {
       WHERE type = 'expense'
       GROUP BY category
     ''');
+
     Map<String, double> totals = {};
     for (var row in result) {
       final category = row['category'] as String?;
       final total = (row['total'] as num?)?.toDouble() ?? 0.0;
-      if (category != null) {
-        totals[category] = total;
-      }
+      if (category != null) totals[category] = total;
     }
     return totals;
   }
 
-  Future<void> updateUserName(String newName) async {
-    final db = await database;
-    await db.update(
-      _userTable,
-      {'name': newName},
-      where: 'name IS NOT NULL',
-    );
+  Future<String> getDefaultCurrency() async {
+    final user = await getUser();
+    return user?.defaultCurrency ?? 'MYR';
   }
 
-  // ============================================================
-  // 🚀 BUDGET METHODS (Syncing to Supabase)
-  // ============================================================
-
-  /// ✅ Set Budget (Writes to Local + Cloud)
-  Future<void> setBudget(String category, double amount) async {
-    final db = await database;
-    
-    // 1. SQLite
-    await db.insert(
-      budgetTable,
-      {
-        'category': category,
-        'amount': amount,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-
-    // 2. Supabase 🚀
-    final user = _supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        await _supabase.from('budgets').upsert({
-          'user_id': user.id,
-          'category': category,
-          'amount': amount,
-        }, onConflict: 'user_id, category'); 
-        debugPrint("✅ Budget synced to Supabase for $category");
-      } catch (e) {
-        debugPrint("⚠️ Failed to sync budget: $e");
-      }
-    }
-  }
-
-  /// Get all budgets (Local)
-  Future<Map<String, double>> getBudgets() async {
-    final db = await database;
-    final result = await db.query(budgetTable);
-    return {
-      for (var row in result)
-        row['category'] as String: (row['amount'] as num?)?.toDouble() ?? 0.0
-    };
-  }
-
-  /// Get daily expense sums (Required for Budget Chart)
   Future<Map<DateTime, double>> getDailyExpenseSums() async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -308,11 +278,37 @@ class DBService {
 
     Map<DateTime, double> sums = {};
     for (final row in result) {
-      final dayStr = row['day'] as String;
-      final total = (row['total'] as num?)?.toDouble() ?? 0.0;
-      final day = DateTime.parse(dayStr);
-      sums[DateTime(day.year, day.month, day.day)] = total;
+      final day = DateTime.parse(row['day'] as String);
+      sums[DateTime(day.year, day.month, day.day)] =
+          (row['total'] as num?)?.toDouble() ?? 0.0;
     }
     return sums;
+  }
+
+  // =========================
+  // 💰 BUDGET METHODS
+  // =========================
+
+  Future<void> setBudget(String category, double amount) async {
+    final db = await database;
+    await db.insert(
+      budgetTable,
+      {
+        'category': category,
+        'amount': amount,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, double>> getBudgets() async {
+    final db = await database;
+    final result = await db.query(budgetTable);
+
+    return {
+      for (var row in result)
+        row['category'] as String:
+            (row['amount'] as num?)?.toDouble() ?? 0.0
+    };
   }
 }

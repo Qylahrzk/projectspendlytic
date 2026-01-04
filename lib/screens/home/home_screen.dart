@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 🔔 NEW
-import 'package:supabase_flutter/supabase_flutter.dart';     // 🚀 NEW
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../../services/db_service.dart';
 import '../../services/auth_service.dart';
@@ -20,23 +20,32 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String currencySymbol = "RM";
-  double currencyRate = 1.0;
-
-  String userName = 'Treasurer';
-  String location = 'Malaysia';
-  double balance = 0;
-  double spend = 0;
-  double budget = 0;
-  bool isOverBudget = false;
-  Map<String, double> categoryTotals = {};
-  List<Map<String, dynamic>> recentTransactions = [];
-  String formattedDate = '';
-  String dayOfWeek = '';
-
+  // ================= SERVICES =================
   final DBService _dbService = DBService();
   final AuthService _authService = AuthService();
 
+  // ================= USER INFO =================
+  String userName = 'Treasurer';
+  String location = 'Malaysia';
+
+  // ================= CURRENCY =================
+  String currencySymbol = "RM";
+  double currencyRate = 1.0;
+
+  // ================= FINANCIAL DATA =================
+  double budget = 0;
+  double spend = 0;
+  double balance = 0;
+  bool isOverBudget = false;
+
+  Map<String, double> categoryTotals = {};
+  List<Map<String, dynamic>> recentTransactions = [];
+
+  // ================= DATE =================
+  String formattedDate = '';
+  String dayOfWeek = '';
+
+  // ================= ICONS =================
   final Map<String, IconData> categoryIcons = {
     'Food': Icons.restaurant,
     'Shopping': Icons.shopping_cart,
@@ -45,36 +54,35 @@ class _HomeScreenState extends State<HomeScreen> {
     'General': Icons.receipt_long,
   };
 
+  // ================= INIT =================
   @override
   void initState() {
     super.initState();
-    _saveDeviceToken(); // 🔔 CRITICAL: Save Token on startup
+    _saveDeviceToken();
     _loadDate();
     _loadUserData();
     _loadHomeData();
   }
 
-  /// 🔔 NEW: Save FCM Token to Supabase so notifications work
+  // ================= FIREBASE FCM =================
   Future<void> _saveDeviceToken() async {
     try {
-      // 1. Get the Notification Address (Token) from Firebase
-      String? token = await FirebaseMessaging.instance.getToken();
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final token = await FirebaseMessaging.instance.getToken();
 
-      if (token != null && userId != null) {
-        // 2. Save it to Supabase 'profiles' table
-        await Supabase.instance.client.from('profiles').upsert({
-          'id': userId,
-          'fcm_token': token,
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-        debugPrint("✅ FCM Token saved to Supabase: $token");
+      if (userId != null && token != null) {
+        await _dbService.saveDeviceToken(
+          userId: userId,
+          token: token,
+        );
+        debugPrint("✅ FCM Token saved");
       }
     } catch (e) {
-      debugPrint("❌ Error saving token: $e");
+      debugPrint("❌ FCM error: $e");
     }
   }
 
+  // ================= DATE =================
   Future<void> _loadDate() async {
     final now = DateTime.now();
     formattedDate = DateFormat('dd MMMM').format(now);
@@ -82,26 +90,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {});
   }
 
+  // ================= USER DATA =================
   Future<void> _loadUserData() async {
     try {
-      final UserModel? userData = await _dbService.getUser();
-      if (userData != null) {
+      final UserModel? user = await _dbService.getUser();
+      if (user != null) {
         setState(() {
-          userName = userData.name;
-          if (userData.defaultCurrency.isNotEmpty) {
-            currencySymbol = CurrencyService.getSymbol(userData.defaultCurrency);
-            currencyRate = CurrencyService.conversionRates[userData.defaultCurrency] ?? 1.0;
-          } else {
-            currencySymbol = "RM";
-            currencyRate = 1.0;
-          }
+          userName = user.name;
+          currencySymbol = CurrencyService.getSymbol(user.defaultCurrency);
+          currencyRate =
+              CurrencyService.conversionRates[user.defaultCurrency] ?? 1.0;
         });
       }
     } catch (e) {
-      debugPrint("Error loading user data: $e");
+      debugPrint("❌ User data error: $e");
     }
   }
 
+  // ================= HOME DATA =================
   Future<void> _loadHomeData() async {
     try {
       final totalBudget = await _dbService.getTotalBudget();
@@ -118,71 +124,74 @@ class _HomeScreenState extends State<HomeScreen> {
         isOverBudget = totalSpend > totalBudget;
       });
     } catch (e) {
-      debugPrint("Error loading home data: $e");
+      debugPrint("❌ Home data error: $e");
     }
   }
 
+  // ================= UTILS =================
   String formatCurrency(double amountInMYR) {
-    double converted = amountInMYR * currencyRate;
+    final converted = amountInMYR * currencyRate;
     return "$currencySymbol ${converted.toStringAsFixed(2)}";
   }
 
+  // ================= LOGOUT =================
   Future<void> _logout() async {
     await _authService.signOut();
     if (!mounted) return;
+
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const AuthLayout()),
-      (route) => false,
+      (_) => false,
     );
   }
 
+  // ================= DRAWER =================
   void _showDrawerMenu() {
     showModalBottomSheet(
       context: context,
-      builder: (_) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.account_circle),
-                title: const Text("Account"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/account_settings');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.settings),
-                title: const Text("Settings"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/settings');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text("Logout"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _logout();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.account_circle),
+              title: const Text("Account"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/account_settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text("Settings"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/settings');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text("Logout"),
+              onTap: () {
+                Navigator.pop(context);
+                _logout();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  // ================= NOTIFICATION =================
   void _showNotificationDialog() {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text("Notifications"),
         content: isOverBudget
-            ? Text("⚠️ You’ve exceeded your monthly budget of ${formatCurrency(budget)}.")
+            ? Text("⚠️ You’ve exceeded your budget of ${formatCurrency(budget)}.")
             : const Text("No new notifications."),
         actions: [
           TextButton(
@@ -194,6 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -203,8 +213,8 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            if (isOverBudget) _buildOverBudgetBanner(colorScheme),
-            _buildPurpleHeader(colorScheme),
+            if (isOverBudget) _buildOverBudgetBanner(),
+            _buildHeader(colorScheme),
             _buildBalanceCard(colorScheme),
             _buildExpenseOverview(colorScheme),
             _buildRecentTransactions(colorScheme),
@@ -214,7 +224,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildOverBudgetBanner(ColorScheme colorScheme) {
+  // ================= WIDGETS =================
+  Widget _buildOverBudgetBanner() {
     return Container(
       width: double.infinity,
       color: Colors.redAccent,
@@ -225,9 +236,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "Over budget! You’ve spent ${formatCurrency(spend)} "
-              "which exceeds your budget of ${formatCurrency(budget)}.",
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              "Over budget! You spent ${formatCurrency(spend)}.",
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -235,46 +246,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPurpleHeader(ColorScheme colorScheme) {
+  Widget _buildHeader(ColorScheme colorScheme) {
     return Container(
-      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 48, 16, 24),
       decoration: BoxDecoration(
         color: colorScheme.primary,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(32),
-          bottomRight: Radius.circular(32),
-        ),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 48, 16, 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Image.asset(
-                "assets/images/app_logo.png",
-                height: 35,
-                color: Colors.white,
-              ),
+              Image.asset("assets/images/app_logo.png",
+                  height: 36, color: Colors.white),
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.notifications_none, color: Colors.white),
+                    icon: const Icon(Icons.notifications_none,
+                        color: Colors.white),
                     onPressed: _showNotificationDialog,
                   ),
                   Consumer<ThemeNotifier>(
-                    builder: (context, themeNotifier, _) {
-                      return IconButton(
-                        icon: Icon(
-                          themeNotifier.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                          color: Colors.white,
-                        ),
-                        onPressed: () {
-                          themeNotifier.toggleTheme(!themeNotifier.isDarkMode);
-                        },
-                      );
-                    },
+                    builder: (_, theme, __) => IconButton(
+                      icon: Icon(
+                        theme.isDarkMode
+                            ? Icons.dark_mode
+                            : Icons.light_mode,
+                        color: Colors.white,
+                      ),
+                      onPressed: () =>
+                          theme.toggleTheme(!theme.isDarkMode),
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.menu, color: Colors.white),
@@ -284,35 +287,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text("Welcome back - $userName",
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold)),
                     Text(
-                      "Welcome back - $userName",
-                      style: const TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      location,
-                      style: const TextStyle(fontSize: 20, color: Colors.white70),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "${formattedDate.toUpperCase()} | ${dayOfWeek.toUpperCase()}",
-                      style: const TextStyle(fontSize: 18, color: Colors.white70, fontWeight: FontWeight.w800),
+                      "$formattedDate | $dayOfWeek",
+                      style: const TextStyle(color: Colors.white70),
                     ),
                   ],
                 ),
               ),
-              Lottie.asset(
-                "assets/animations/money.json",
-                height: 140,
-                width: 180,
-              ),
+              Lottie.asset("assets/animations/money.json", height: 140),
             ],
           ),
         ],
@@ -323,15 +316,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBalanceCard(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: [colorScheme.primary, colorScheme.secondary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -346,110 +337,59 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _balanceItem(String label, double value) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        const SizedBox(height: 6),
-        Text(
-          formatCurrency(value),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-        ),
+        Text(label, style: const TextStyle(color: Colors.white70)),
+        Text(formatCurrency(value),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   Widget _buildExpenseOverview(ColorScheme colorScheme) {
-    return Container(
+    return Card(
       margin: const EdgeInsets.all(16),
-      child: Card(
-        color: colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Expenses - Daily Overview",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface),
-              ),
-              const SizedBox(height: 12),
-              categoryTotals.isEmpty
-                  ? Text("No expenses found.", style: TextStyle(color: colorScheme.onSurface))
-                  : Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: categoryTotals.entries.map((entry) {
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Color.lerp(colorScheme.primary, Colors.transparent, 0.8),
-                              child: Icon(
-                                categoryIcons[entry.key] ?? Icons.receipt_long,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(entry.key, style: TextStyle(fontSize: 12, color: colorScheme.onSurface)),
-                            Text(
-                              "-${formatCurrency(entry.value)}",
-                              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-            ],
-          ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: categoryTotals.entries.map((entry) {
+            return Column(
+              children: [
+                CircleAvatar(
+                  backgroundColor:
+                      colorScheme.primary.withOpacity(0.1),
+                  child: Icon(categoryIcons[entry.key],
+                      color: colorScheme.primary),
+                ),
+                const SizedBox(height: 4),
+                Text(entry.key),
+                Text(
+                  "-${formatCurrency(entry.value)}",
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ],
+            );
+          }).toList(),
         ),
       ),
     );
   }
 
   Widget _buildRecentTransactions(ColorScheme colorScheme) {
-    return Container(
+    return Card(
       margin: const EdgeInsets.all(16),
-      child: Card(
-        color: colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Recent Expenses",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface),
-              ),
-              const SizedBox(height: 12),
-              recentTransactions.isEmpty
-                  ? Text("No expenses found.", style: TextStyle(color: colorScheme.onSurface))
-                  : Column(
-                      children: recentTransactions.map((tx) {
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                          leading: Icon(
-                            categoryIcons[tx["category"]] ?? Icons.receipt_long,
-                            color: colorScheme.primary,
-                          ),
-                          title: Text(
-                            tx["title"] ?? "",
-                            style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurface),
-                          ),
-                          subtitle: Text(
-                            tx["category"] ?? "Uncategorized",
-                            style: TextStyle(color: colorScheme.onSurface),
-                          ),
-                          trailing: Text(
-                            "-${formatCurrency((tx["amount"] ?? 0).toDouble())}",
-                            style: const TextStyle(color: Colors.redAccent),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-            ],
-          ),
-        ),
+      child: Column(
+        children: recentTransactions.map((tx) {
+          return ListTile(
+            leading: Icon(categoryIcons[tx['category']]),
+            title: Text(tx['title']),
+            trailing: Text(
+              "-${formatCurrency(tx['amount'])}",
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

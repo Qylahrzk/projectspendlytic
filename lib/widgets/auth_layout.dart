@@ -1,28 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:local_auth/local_auth.dart'; // 🔒 Biometrics
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:local_auth/local_auth.dart';
 
-// Import your app screens
-import '../screens/auth/get_started_screen.dart'; // Login Screen
-import '../navigation/app_loading_page.dart';     // Loading Spinner
-import '../navigation/app_navigation_layout.dart';  // Main Dashboard
-import '../services/db_service.dart';             // Local Database
+import '../screens/auth/get_started_screen.dart';
+import '../navigation/app_loading_page.dart';
+import '../navigation/app_navigation_layout.dart';
+import '../services/db_service.dart';
 
 class AuthLayout extends StatefulWidget {
-  const AuthLayout({super.key, this.pageIfNotConnected});
-
-  final Widget? pageIfNotConnected;
+  const AuthLayout({super.key});
 
   @override
   State<AuthLayout> createState() => _AuthLayoutState();
 }
 
 class _AuthLayoutState extends State<AuthLayout> {
-  // Biometric State Management
   final LocalAuthentication _localAuth = LocalAuthentication();
-  bool _isBiometricVerified = false;  // Has the user scanned their finger yet?
-  bool _isBiometricAvailable = false; // Does the phone actually have a scanner?
+
+  bool _isBiometricAvailable = false;
+  bool _isBiometricVerified = false;
 
   @override
   void initState() {
@@ -30,158 +27,140 @@ class _AuthLayoutState extends State<AuthLayout> {
     _checkBiometricAvailability();
   }
 
-  /// 1. Check if the device has hardware support (Fingerprint/Face)
+  /// 🔍 Check if device supports biometrics
   Future<void> _checkBiometricAvailability() async {
     try {
-      final bool canCheckBiometrics = await _localAuth.canCheckBiometrics;
-      final bool isDeviceSupported = await _localAuth.isDeviceSupported();
-      
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isSupported = await _localAuth.isDeviceSupported();
+
       if (mounted) {
         setState(() {
-          _isBiometricAvailable = canCheckBiometrics && isDeviceSupported;
+          _isBiometricAvailable = canCheck && isSupported;
         });
       }
     } catch (e) {
-      debugPrint("Biometric Check Error: $e");
+      debugPrint('Biometric availability error: $e');
     }
   }
 
-  /// 2. Trigger the Native Fingerprint Prompt
+  /// 🔐 Trigger fingerprint / face unlock
   Future<void> _authenticateUser() async {
     try {
-      final bool didAuthenticate = await _localAuth.authenticate(
-        localizedReason: 'Scan your fingerprint to access Spendlytic',
+      final authenticated = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to access Spendlytic',
         options: const AuthenticationOptions(
-          stickyAuth: true, // Keeps the prompt open if app goes to background
-          biometricOnly: true, // Don't allow PIN/Pattern fallback (stricter security)
+          biometricOnly: true,
+          stickyAuth: true,
         ),
       );
 
-      if (didAuthenticate && mounted) {
+      if (authenticated && mounted) {
         setState(() {
-          _isBiometricVerified = true; // ✅ UNLOCK THE APP
+          _isBiometricVerified = true;
         });
       }
     } on PlatformException catch (e) {
-      debugPrint("Biometric Error: $e");
-      // If the user cancels or fails too many times, they stay on the lock screen.
+      debugPrint('Biometric auth error: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🎧 Listen to Supabase Auth State Changes (Login/Logout)
-    return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
-      builder: (context, snapshot) {
-        
-        // A. Loading State (Checking session...)
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, firebaseSnapshot) {
+        // ⏳ Loading Firebase auth state
+        if (firebaseSnapshot.connectionState == ConnectionState.waiting) {
           return const AppLoadingPage();
         }
 
-        final session = snapshot.data?.session;
+        final firebaseUser = firebaseSnapshot.data;
 
-        // ============================================================
-        // CASE 1: USER IS NOT LOGGED IN (Session is Null)
-        // ============================================================
-        if (session == null) {
-          // Reset biometric state so they have to scan again next time they login
-          _isBiometricVerified = false; 
-          
-          // Show the Login/Signup Screen
-          return widget.pageIfNotConnected ?? const GetStartedScreen();
+        // =====================================================
+        // 🚪 NOT LOGGED IN
+        // =====================================================
+        if (firebaseUser == null) {
+          _isBiometricVerified = false;
+          return const GetStartedScreen();
         }
 
-        // ============================================================
-        // CASE 2: USER IS LOGGED IN (Session Exists)
-        // ============================================================
-
-        // A. If they have already passed the fingerprint check:
-        if (_isBiometricVerified) {
-          return const AppNavigationLayout(); // 🚀 Show Dashboard
+        // =====================================================
+        // ✅ LOGGED IN + BIOMETRIC VERIFIED
+        // =====================================================
+        if (_isBiometricVerified || !_isBiometricAvailable) {
+          return const AppNavigationLayout();
         }
 
-        // B. If the device DOES NOT have a scanner (Emulator or old phone):
-        if (!_isBiometricAvailable) {
-           // Auto-allow them (or you could force a PIN code here)
-           return const AppNavigationLayout(); 
+        // =====================================================
+        // 🔐 NEED BIOMETRIC VERIFICATION
+        // =====================================================
+        if (firebaseSnapshot.connectionState == ConnectionState.active) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_isBiometricVerified) {
+              _authenticateUser();
+            }
+          });
         }
 
-        // C. If they haven't scanned yet:
-        // We trigger the biometric popup immediately when the screen loads
-        if (snapshot.connectionState == ConnectionState.active) {
-            // Use a post-frame callback to ensure we don't trigger it during a build
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-               // Only trigger if we aren't already verified and no dialog is open
-               if (!_isBiometricVerified) {
-                 _authenticateUser();
-               }
-            });
-        }
-
-        // Show the "Lock Screen" while waiting for the scan
         return _buildLockScreen();
       },
     );
   }
 
-  /// 🔒 The UI shown behind the fingerprint dialog
+  /// 🔒 Lock Screen UI
   Widget _buildLockScreen() {
     return Scaffold(
-      backgroundColor: Theme.of(context).primaryColor,
+      backgroundColor: Colors.deepPurple,
       body: Center(
         child: Padding(
-          padding: const EdgeInsets.all(30.0),
+          padding: const EdgeInsets.all(30),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.lock_outline_rounded,
-                size: 80,
-                color: Colors.white,
-              ),
+              const Icon(Icons.lock_outline, size: 80, color: Colors.white),
               const SizedBox(height: 20),
               const Text(
-                "Spendlytic Locked",
+                'Spendlytic Locked',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               const Text(
-                "For your security, please authenticate to continue.",
+                'Please authenticate to continue',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white70),
               ),
               const SizedBox(height: 40),
-              
-              // Manual Retry Button (in case they cancelled the dialog)
+
               ElevatedButton.icon(
-                onPressed: _authenticateUser, 
+                onPressed: _authenticateUser,
                 icon: const Icon(Icons.fingerprint),
-                label: const Text("Unlock with Biometrics"),
+                label: const Text('Unlock with Biometrics'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).primaryColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  foregroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 30,
+                    vertical: 14,
+                  ),
                 ),
               ),
+
               const SizedBox(height: 20),
 
-              // Logout Button (In case they are stuck or want to switch accounts)
               TextButton(
                 onPressed: () async {
-                  await Supabase.instance.client.auth.signOut();
+                  await FirebaseAuth.instance.signOut();
                   await DBService().clearUserData();
                 },
                 child: const Text(
-                  "Log Out",
+                  'Log Out',
                   style: TextStyle(color: Colors.white70),
                 ),
-              )
+              ),
             ],
           ),
         ),
